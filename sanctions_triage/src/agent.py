@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from anthropic import Anthropic
 
 # Make sibling imports work whether run from src/ or the repo root
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -53,14 +53,13 @@ from worksheet import (  # noqa: E402
     Worksheet,
 )
 
-# ── LLM client (Anthropic Claude, OpenAI-compatible) ─────────────────
+# ── LLM client (Anthropic Claude, native SDK) ────────────────────────
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-ANTHROPIC_API_KEY  = os.environ.get("ANTHROPIC_API_KEY",  "").strip()
-ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1/")
-ANTHROPIC_MODEL    = os.environ.get("ANTHROPIC_MODEL",    "claude-haiku-4-5-20251001")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+ANTHROPIC_MODEL   = os.environ.get("ANTHROPIC_MODEL",   "claude-haiku-4-5-20251001")
 
-_client = OpenAI(base_url=ANTHROPIC_BASE_URL, api_key=ANTHROPIC_API_KEY or "missing-key")
+_client = Anthropic(api_key=ANTHROPIC_API_KEY or "missing-key")
 
 
 # ── Tool schemas for OpenAI-style function calling ───────────────────
@@ -76,121 +75,101 @@ TOOLS_MAP = {
 
 TOOL_SCHEMAS = [
     {
-        "type": "function",
-        "function": {
-            "name": "screening_api_lookup",
-            "description": (
-                "Gets the sanctions alert from DynamoDB and queries the real "
-                "66,114-row sanctions.db for the matched entity. Call this FIRST "
-                "to learn the customer_id and entity_name."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"alert_id": {"type": "string"}},
-                "required": ["alert_id"],
-            },
+        "name": "screening_api_lookup",
+        "description": (
+            "Gets the sanctions alert from DynamoDB and queries the real "
+            "66,114-row sanctions.db for the matched entity. Call this FIRST "
+            "to learn the customer_id and entity_name."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"alert_id": {"type": "string"}},
+            "required": ["alert_id"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "core_banking_get_customer",
-            "description": (
-                "Fetches full customer KYC and last 10 transactions from DynamoDB. "
-                "Returns risk_rating, nationality, DOB, and counts of large / "
-                "international transactions."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"customer_id": {"type": "string"}},
-                "required": ["customer_id"],
-            },
+        "name": "core_banking_get_customer",
+        "description": (
+            "Fetches full customer KYC and last 10 transactions from DynamoDB. "
+            "Returns risk_rating, nationality, DOB, and counts of large / "
+            "international transactions."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"customer_id": {"type": "string"}},
+            "required": ["customer_id"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "get_adverse_media",
-            "description": (
-                "Searches DynamoDB adverse_media_records for negative press "
-                "coverage about this customer (linked by person name)."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "customer_id":   {"type": "string"},
-                    "customer_name": {"type": "string"},
-                },
-                "required": ["customer_id"],
+        "name": "get_adverse_media",
+        "description": (
+            "Searches DynamoDB adverse_media_records for negative press "
+            "coverage about this customer (linked by person name)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "customer_id":   {"type": "string"},
+                "customer_name": {"type": "string"},
             },
+            "required": ["customer_id"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "get_ubo_chain",
-            "description": (
-                "Gets the Ultimate Beneficial Owner chain for the sanctioned "
-                "entity from DynamoDB. Linked by entity_name (not customer_id)."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "customer_id": {"type": "string"},
-                    "entity_name": {"type": "string"},
-                },
-                "required": ["customer_id"],
+        "name": "get_ubo_chain",
+        "description": (
+            "Gets the Ultimate Beneficial Owner chain for the sanctioned "
+            "entity from DynamoDB. Linked by entity_name (not customer_id)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "customer_id": {"type": "string"},
+                "entity_name": {"type": "string"},
             },
+            "required": ["customer_id"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "case_management_prior_cases",
-            "description": (
-                "Gets prior sanctions alert history for this customer name "
-                "via fuzzy match against prior_cases.json. Returns counts of "
-                "prior clearances and escalations."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"name": {"type": "string"}},
-                "required": ["name"],
-            },
+        "name": "case_management_prior_cases",
+        "description": (
+            "Gets prior sanctions alert history for this customer name "
+            "via fuzzy match against prior_cases.json. Returns counts of "
+            "prior clearances and escalations."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "get_company_registry",
-            "description": (
-                "Checks DynamoDB company_registry for corporate ties to this "
-                "entity (matches either company_name or director person_name)."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"entity_name": {"type": "string"}},
-                "required": ["entity_name"],
-            },
+        "name": "get_company_registry",
+        "description": (
+            "Checks DynamoDB company_registry for corporate ties to this "
+            "entity (matches either company_name or director person_name)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"entity_name": {"type": "string"}},
+            "required": ["entity_name"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "close_alert",
-            "description": (
-                "ALWAYS BLOCKED. Only human analysts can close alerts under "
-                "PMLA 2002 / RBI KYC Master Direction 2025. Do not call."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "alert_id":    {"type": "string"},
-                    "disposition": {"type": "string"},
-                },
-                "required": ["alert_id", "disposition"],
+        "name": "close_alert",
+        "description": (
+            "ALWAYS BLOCKED. Only human analysts can close alerts under "
+            "PMLA 2002 / RBI KYC Master Direction 2025. Do not call."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "alert_id":    {"type": "string"},
+                "disposition": {"type": "string"},
             },
+            "required": ["alert_id", "disposition"],
         },
+        "cache_control": {"type": "ephemeral"},
     },
 ]
 
@@ -288,7 +267,7 @@ class HybridOrchestrator:
 
         print("\n" + "█" * 70)
         print(f" HYBRID ORCHESTRATOR  —  alert {alert_id}")
-        print(f" LLM    : {self.model}  @  {ANTHROPIC_BASE_URL}")
+        print(f" LLM    : {self.model}")
         print(f" Scoring: rule-based (deterministic)")
         print("█" * 70)
         emit({"type": "run_start", "model": self.model})
@@ -388,8 +367,8 @@ class HybridOrchestrator:
         print(f" PHASE 1: LLM investigation ({self.model})")
         print("─" * 60)
 
-        messages = [
-            {"role": "system", "content": PHASE1_PROMPT},
+        # Anthropic shape: system is top-level, NOT a message role.
+        messages: list[dict] = [
             {"role": "user", "content": (
                 f"Investigate sanctions alert {alert_id}. "
                 f"Start by calling screening_api_lookup(alert_id='{alert_id}'), "
@@ -406,57 +385,63 @@ class HybridOrchestrator:
             print(f"\n  [LLM] step {iteration}")
             emit({"type": "llm_step", "step": iteration})
             try:
-                resp = self.client.chat.completions.create(
+                resp = self.client.messages.create(
                     model=self.model,
-                    messages=messages,
-                    tools=TOOL_SCHEMAS,
-                    tool_choice="auto",
                     max_tokens=512,
                     temperature=0.0,
+                    system=[{"type": "text", "text": PHASE1_PROMPT, "cache_control": {"type": "ephemeral"}}],
+                    tools=TOOL_SCHEMAS,
+                    messages=messages,
                 )
             except Exception as e:
                 print(f"  [LLM] API error: {e!r}")
                 break
 
-            choice = resp.choices[0]
-            msg = choice.message
+            cache_read = getattr(resp.usage, "cache_read_input_tokens", 0) or 0
+            cache_write = getattr(resp.usage, "cache_creation_input_tokens", 0) or 0
+            print(f"  [cache] read={cache_read} write={cache_write} input={resp.usage.input_tokens}")
+            self._emit(
+                "cache_stats",
+                alert_id=alert_id,
+                step=iteration,
+                cache_read=cache_read,
+                cache_creation=cache_write,
+                input_tokens=resp.usage.input_tokens,
+            )
 
-            if not getattr(msg, "tool_calls", None):
-                print(f"  [LLM] data gathering complete: "
-                      f"{(msg.content or '').strip()[:80]}")
+            # Stop condition: anything other than tool_use means we're done.
+            if resp.stop_reason != "tool_use":
+                preview = ""
+                for block in resp.content:
+                    if getattr(block, "type", None) == "text":
+                        preview = (block.text or "").strip()[:80]
+                        break
+                print(f"  [LLM] data gathering complete: {preview}")
                 break
 
-            messages.append({
-                "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        },
-                    }
-                    for tc in msg.tool_calls
-                ],
-            })
+            # Append the assistant turn verbatim — the SDK accepts its own
+            # content blocks back as input on the next turn.
+            messages.append({"role": "assistant", "content": resp.content})
 
-            for tc in msg.tool_calls:
-                name = tc.function.name
-                try:
-                    args = json.loads(tc.function.arguments or "{}")
-                except json.JSONDecodeError:
-                    args = {}
+            # Build ONE user-role turn whose content is a list of tool_result
+            # blocks. Anthropic requires every tool_use to be answered with a
+            # matching tool_result in the very next user turn.
+            tool_result_blocks: list[dict] = []
+
+            for block in resp.content:
+                if getattr(block, "type", None) != "tool_use":
+                    continue
+                name = block.name
+                args = block.input or {}
                 print(f"  [LLM → {name}]  args={args}")
 
                 # Duplicate-call guard — short-circuit with a hint
-                key = (name, tuple(sorted((args or {}).items())))
+                key = (name, tuple(sorted(args.items())))
                 if key in seen_calls:
                     note = {"note": f"already called {name} with same args — skipping"}
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc.id,
+                    tool_result_blocks.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
                         "content": json.dumps(note),
                     })
                     continue
@@ -496,15 +481,18 @@ class HybridOrchestrator:
                     ok=tool_ok, blocked=tool_blocked,
                 )
 
-                # Compact tool output for the LLM context — keep total
-                # well below the 6k TPM limit. Full result already in
-                # tool_results dict for Phase 2.
+                # Compact tool output for the LLM context — keep each result
+                # under 600 chars. Full result is in tool_results for Phase 2.
                 summary = self._summarise_tool_output(name, tool_out)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
+                tool_result_blocks.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
                     "content": json.dumps(summary, default=str)[:600],
                 })
+
+            # Append the consolidated user-role tool_result message.
+            if tool_result_blocks:
+                messages.append({"role": "user", "content": tool_result_blocks})
 
             # Early exit: every evidence tool already returned a real result
             if self.EVIDENCE_TOOLS.issubset(tool_results.keys()):
@@ -768,16 +756,14 @@ class HybridOrchestrator:
         """).strip()
 
         try:
-            resp = self.client.chat.completions.create(
+            resp = self.client.messages.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": PHASE3_PROMPT},
-                    {"role": "user",   "content": context},
-                ],
                 max_tokens=420,
                 temperature=0.3,
+                system=PHASE3_PROMPT,
+                messages=[{"role": "user", "content": context}],
             )
-            text = (resp.choices[0].message.content or "").strip()
+            text = (resp.content[0].text or "").strip()
         except Exception as e:
             text = (f"Narrative generation failed: {e}. "
                     f"Verdict: {score_pack['recommendation']} "
