@@ -1,1 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Secrets — never commit
 .env
+.env.*
+!.env.example
+
+# Runtime artifacts
+sanctions_triage/runtime/audit_log.jsonl
+*.db-journal
