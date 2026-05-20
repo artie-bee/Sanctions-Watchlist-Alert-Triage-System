@@ -1,5 +1,5 @@
 """
-HybridOrchestrator — Groq llama-3.1-8b-instant for dynamic tool calling
+HybridOrchestrator — Anthropic Claude Haiku for dynamic tool calling
 and narrative, plus a rule-based scoring formula for the verdict.
 
 Three phases:
@@ -12,16 +12,22 @@ is exported as a backwards-compatible alias so the existing
 `run_demo.py` (which `from agent import MockOrchestrator`) keeps working
 without modification.
 
-Swapping LLM providers:
-  - Anthropic Claude :  base_url = "https://api.anthropic.com/v1"
-                        api_key  = ANTHROPIC_API_KEY
-                        model    = "claude-haiku-4-5-20251001"  (etc.)
-  - OpenAI           :  base_url = "https://api.openai.com/v1"
-  - Ollama (local)   :  base_url = "http://localhost:11434/v1"
-                        api_key  = "ollama"
-                        model    = "llama3"
-No other code changes required.
+Active provider: Anthropic Claude Haiku, reached through the OpenAI-compatible
+endpoint so the existing `openai` Python client keeps working unchanged.
 """
+
+# To swap providers, change these three lines:
+#   - Anthropic Claude :  base_url = "https://api.anthropic.com/v1/"   (active)
+#                         api_key  = ANTHROPIC_API_KEY
+#                         model    = "claude-haiku-4-5-20251001"
+#   - Groq             :  base_url = "https://api.groq.com/openai/v1"
+#                         api_key  = GROQ_API_KEY
+#                         model    = "llama-3.1-8b-instant"
+#   - OpenAI           :  base_url = "https://api.openai.com/v1"
+#   - Ollama (local)   :  base_url = "http://localhost:11434/v1"
+#                         api_key  = "ollama"
+#                         model    = "llama3"
+# No other code changes required.
 from __future__ import annotations
 
 import json
@@ -47,14 +53,14 @@ from worksheet import (  # noqa: E402
     Worksheet,
 )
 
-# ── LLM client (Groq, OpenAI-compatible) ─────────────────────────────
+# ── LLM client (Anthropic Claude, OpenAI-compatible) ─────────────────
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-GROQ_API_KEY  = os.environ.get("GROQ_API_KEY",  "").strip()
-GROQ_BASE_URL = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-GROQ_MODEL    = os.environ.get("GROQ_MODEL",    "llama-3.1-8b-instant")
+ANTHROPIC_API_KEY  = os.environ.get("ANTHROPIC_API_KEY",  "").strip()
+ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1/")
+ANTHROPIC_MODEL    = os.environ.get("ANTHROPIC_MODEL",    "claude-haiku-4-5-20251001")
 
-_client = OpenAI(base_url=GROQ_BASE_URL, api_key=GROQ_API_KEY or "missing-key")
+_client = OpenAI(base_url=ANTHROPIC_BASE_URL, api_key=ANTHROPIC_API_KEY or "missing-key")
 
 
 # ── Tool schemas for OpenAI-style function calling ───────────────────
@@ -240,14 +246,14 @@ Plain English. Specific. Cite actual values from the tool results. Under \
 # ── Orchestrator ──────────────────────────────────────────────────────
 class HybridOrchestrator:
     """
-    Phase 1: Groq llama-3.1-8b-instant decides which tools to call.
+    Phase 1: Claude Haiku decides which tools to call.
     Phase 2: Pure-Python rule-based scoring decides the verdict.
-    Phase 3: Groq llama-3.1-8b-instant writes the analyst narrative.
+    Phase 3: Claude Haiku writes the analyst narrative.
     """
 
     def __init__(self, progress_cb: Optional[Callable[[dict], None]] = None):
         self.client = _client
-        self.model  = GROQ_MODEL
+        self.model  = ANTHROPIC_MODEL
         self.progress_cb = progress_cb
 
     def _emit(self, event_type: str, **data) -> None:
@@ -282,7 +288,7 @@ class HybridOrchestrator:
 
         print("\n" + "█" * 70)
         print(f" HYBRID ORCHESTRATOR  —  alert {alert_id}")
-        print(f" LLM    : {self.model}  @  {GROQ_BASE_URL}")
+        print(f" LLM    : {self.model}  @  {ANTHROPIC_BASE_URL}")
         print(f" Scoring: rule-based (deterministic)")
         print("█" * 70)
         emit({"type": "run_start", "model": self.model})
@@ -379,7 +385,7 @@ class HybridOrchestrator:
         emit: Callable[[dict], None] = lambda _e: None,
     ) -> dict:
         print("\n" + "─" * 60)
-        print(" PHASE 1: LLM investigation (Groq llama-3.1-8b-instant)")
+        print(f" PHASE 1: LLM investigation ({self.model})")
         print("─" * 60)
 
         messages = [
@@ -815,7 +821,7 @@ class HybridOrchestrator:
         # the LLM's plain-English explanation underneath. Worksheet schema
         # is untouched — both pieces live in the existing `narrative` field.
         combined_narrative = (
-            f"{rule_narrative}\n\n— LLM (Groq {self.model}) ——————————————\n"
+            f"{rule_narrative}\n\n— LLM ({self.model}) ——————————————\n"
             f"{llm_narrative}"
         )
 
