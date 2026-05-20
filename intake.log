@@ -1,0 +1,12 @@
+INFO:     Started server process [15996]
+INFO:     Waiting for application startup.
+2026-05-18 14:23:45,289 INFO alert_intake — Created table customer_kyc
+2026-05-18 14:23:45,392 INFO alert_intake — Created table customer_transactions
+2026-05-18 14:23:45,492 INFO alert_intake — Created table adverse_media_records
+2026-05-18 14:23:45,598 INFO alert_intake — Created table company_registry
+2026-05-18 14:23:45,704 INFO alert_intake — Created table ubo_ownership_chains
+2026-05-18 14:23:45,770 INFO alert_intake — DynamoDB Local connected. Tables ready: sanctions_alerts, customer_kyc, customer_transactions, adverse_media_records, company_registry, ubo_ownership_chains.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8005 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57731 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57743 - "GET /health HTTP/1.1" 200 OK

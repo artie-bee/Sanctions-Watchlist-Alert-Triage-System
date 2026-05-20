@@ -1,0 +1,340 @@
+[workflow_ui] stdout encoding = utf-8
+INFO:     Will watch for changes in these directories: ['C:\\Users\\artlptp255user\\Downloads\\Sanction Search']
+INFO:     Uvicorn running on http://0.0.0.0:7000 (Press CTRL+C to quit)
+INFO:     Started reloader process [8968] using WatchFiles
+[workflow_ui] stdout encoding = utf-8
+[workflow_ui] stdout encoding = utf-8
+INFO:     Started server process [23568]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:60253 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60260 - "HEAD / HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:60766 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60771 - "GET /simulator HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60778 - "GET /observability HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51742 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51742 - "GET /static/css/workflow.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:51742 - "GET /static/js/workflow.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:51742 - "GET /api/alerts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65042 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54542 - "GET /simulator HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54542 - "GET /static/css/simulator.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:54542 - "GET /static/js/simulator.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:54542 - "GET /api/simulator-alerts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63413 - "GET /api/simulator-run?alert_id=ALR-DBAC1AEF35 HTTP/1.1" 200 OK
+
+██████████████████████████████████████████████████████████████████████
+ HYBRID ORCHESTRATOR  —  alert ALR-DBAC1AEF35
+ LLM    : llama-3.1-8b-instant  @  https://api.groq.com/openai/v1
+ Scoring: rule-based (deterministic)
+██████████████████████████████████████████████████████████████████████
+
+────────────────────────────────────────────────────────────
+ PHASE 1: LLM investigation (Groq llama-3.1-8b-instant)
+────────────────────────────────────────────────────────────
+
+  [LLM] step 1
+  [LLM → screening_api_lookup]  args={'alert_id': 'ALR-DBAC1AEF35'}
+
+  [Tool: screening_api_lookup]
+    Alert ID    : ALR-DBAC1AEF35
+    Entity name : ARTEMIS
+    DB hits     : 5 real records in sanctions.db
+    Top hit     : ARTEMIS OFFSHORE  [ofac_full_xml / PEESA-EO14039,RUSSIA-EO14024]
+  [LLM → core_banking_get_customer]  args={'customer_id': 'CUST-0361'}
+    ⚠ Customer CUST-0361 not found in DynamoDB customer_kyc
+  [LLM → get_adverse_media]  args={'customer_id': 'CUST-0361', 'customer_name': 'John Doe'}
+
+  [Tool: get_adverse_media]
+    Customer    : CUST-0361  (John Doe)
+    Media hits  : 0
+  [LLM → get_ubo_chain]  args={'customer_id': 'CUST-0361', 'entity_name': 'Roman Ivanovitj MELNIK'}
+
+  [Tool: get_ubo_chain]
+    Customer    : CUST-0361
+    Entity      : Roman Ivanovitj MELNIK
+    UBO chain   : none
+  [LLM → case_management_prior_cases]  args={'name': 'John Doe'}
+
+  [Tool: case_management_prior_cases]
+    Name queried : John Doe
+    Cases found  : 0
+    Clearances   : 0
+    Escalations  : 0
+  [LLM → get_company_registry]  args={'entity_name': 'Roman Ivanovitj MELNIK'}
+
+  [Tool: get_company_registry]
+    Entity      : Roman Ivanovitj MELNIK
+    Registry    : 0 match(es)
+
+  [LLM] step 2
+  [LLM] data gathering complete: DONE
+  [fallback] core_banking_get_customer  customer_id=CUST-0115
+
+  [Tool: core_banking_get_customer]
+    Customer ID   : CUST-0115
+    Name          : Hashim Akkad
+    Risk rating   : MEDIUM
+    Transactions  : 0
+    Large (>5L)   : 0
+    Intl/wire     : 0
+  [correct-args] get_adverse_media  name='Hashim Akkad'
+
+  [Tool: get_adverse_media]
+    Customer    : CUST-0115  (Hashim Akkad)
+    Media hits  : 0
+  [correct-args] get_ubo_chain      entity='ARTEMIS'
+
+  [Tool: get_ubo_chain]
+    Customer    : CUST-0115
+    Entity      : ARTEMIS
+    UBO chain   : none
+  [correct-args] case_management_prior_cases  name='Hashim Akkad'
+
+  [Tool: case_management_prior_cases]
+    Name queried : Hashim Akkad
+    Cases found  : 0
+    Clearances   : 0
+    Escalations  : 0
+  [correct-args] get_company_registry         entity='ARTEMIS'
+
+  [Tool: get_company_registry]
+    Entity      : ARTEMIS
+    Registry    : 0 match(es)
+
+────────────────────────────────────────────────────────────
+ PHASE 2: rule-based scoring
+────────────────────────────────────────────────────────────
+  base=0.501  +context=+0.000  +confidence_adj=+0.000  →  final=0.501
+  Score    : 0.501
+  Verdict  : FALSE_POSITIVE
+  Confidence: 50%
+
+────────────────────────────────────────────────────────────
+ PHASE 3: LLM narrative
+────────────────────────────────────────────────────────────
+  Narrative generated (1209 chars)
+
+  [HOOK PreToolUse]  BLOCKED  close_alert({'alert_id': 'ALR-DBAC1AEF35', 'disposition': 'FALSE_POSITIVE'})
+                     reason: PMLA 2002 / RBI KYC Master Direction 2025: alert disposition requires human analyst sign-off.
+
+  [HOOK PreToolUse]  BLOCKED  close_alert({'alert_id': 'ALR-DBAC1AEF35', 'disposition': 'TRUE_MATCH'})
+                     reason: PMLA 2002 / RBI KYC Master Direction 2025: alert disposition requires human analyst sign-off.
+
+  [HOOK PreToolUse]  BLOCKED  close_alert({'alert_id': 'ALR-DBAC1AEF35', 'disposition': 'ESCALATED'})
+                     reason: PMLA 2002 / RBI KYC Master Direction 2025: alert disposition requires human analyst sign-off.
+INFO:     127.0.0.1:50468 - "GET /api/simulator-run?alert_id=ALR-106B2CD00C HTTP/1.1" 200 OK
+
+██████████████████████████████████████████████████████████████████████
+ HYBRID ORCHESTRATOR  —  alert ALR-106B2CD00C
+ LLM    : llama-3.1-8b-instant  @  https://api.groq.com/openai/v1
+ Scoring: rule-based (deterministic)
+██████████████████████████████████████████████████████████████████████
+
+────────────────────────────────────────────────────────────
+ PHASE 1: LLM investigation (Groq llama-3.1-8b-instant)
+────────────────────────────────────────────────────────────
+
+  [LLM] step 1
+  [LLM → screening_api_lookup]  args={'alert_id': 'ALR-106B2CD00C'}
+
+  [Tool: screening_api_lookup]
+    Alert ID    : ALR-106B2CD00C
+    Entity name : PANKRASHKIN, Aleksei Vladimirovich
+    DB hits     : 1 real records in sanctions.db
+    Top hit     : PANKRASHKIN, Aleksei Vladimirovich  [ofac_full_xml / RUSSIA-EO14024]
+  [LLM → core_banking_get_customer]  args={'customer_id': 'CUST-0361'}
+    ⚠ Customer CUST-0361 not found in DynamoDB customer_kyc
+  [LLM → get_adverse_media]  args={'customer_id': 'CUST-0361', 'customer_name': 'John Doe'}
+
+  [Tool: get_adverse_media]
+    Customer    : CUST-0361  (John Doe)
+    Media hits  : 0
+  [LLM → get_ubo_chain]  args={'customer_id': 'CUST-0361', 'entity_name': 'Roman Ivanovitj MELNIK'}
+
+  [Tool: get_ubo_chain]
+    Customer    : CUST-0361
+    Entity      : Roman Ivanovitj MELNIK
+    UBO chain   : none
+  [LLM → case_management_prior_cases]  args={'name': 'John Doe'}
+
+  [Tool: case_management_prior_cases]
+    Name queried : John Doe
+    Cases found  : 0
+    Clearances   : 0
+    Escalations  : 0
+  [LLM → get_company_registry]  args={'entity_name': 'Roman Ivanovitj MELNIK'}
+
+  [Tool: get_company_registry]
+    Entity      : Roman Ivanovitj MELNIK
+    Registry    : 0 match(es)
+
+  [LLM] step 2
+  [LLM] data gathering complete: DONE
+  [fallback] core_banking_get_customer  customer_id=CUST-0051
+
+  [Tool: core_banking_get_customer]
+    Customer ID   : CUST-0051
+    Name          : Nabil CHOUMAN
+    Risk rating   : MEDIUM
+    Transactions  : 0
+    Large (>5L)   : 0
+    Intl/wire     : 0
+  [correct-args] get_adverse_media  name='Nabil CHOUMAN'
+
+  [Tool: get_adverse_media]
+    Customer    : CUST-0051  (Nabil CHOUMAN)
+    Media hits  : 0
+  [correct-args] get_ubo_chain      entity='PANKRASHKIN, Aleksei Vladimirovich'
+
+  [Tool: get_ubo_chain]
+    Customer    : CUST-0051
+    Entity      : PANKRASHKIN, Aleksei Vladimirovich
+    UBO chain   : none
+  [correct-args] case_management_prior_cases  name='Nabil CHOUMAN'
+
+  [Tool: case_management_prior_cases]
+    Name queried : Nabil CHOUMAN
+    Cases found  : 0
+    Clearances   : 0
+    Escalations  : 0
+  [correct-args] get_company_registry         entity='PANKRASHKIN, Aleksei Vladimirovich'
+
+  [Tool: get_company_registry]
+    Entity      : PANKRASHKIN, Aleksei Vladimirovich
+    Registry    : 0 match(es)
+
+────────────────────────────────────────────────────────────
+ PHASE 2: rule-based scoring
+────────────────────────────────────────────────────────────
+  base=0.748  +context=+0.000  +confidence_adj=+0.000  →  final=0.748
+  Score    : 0.748
+  Verdict  : UNCERTAIN
+  Confidence: 75%
+
+────────────────────────────────────────────────────────────
+ PHASE 3: LLM narrative
+────────────────────────────────────────────────────────────
+  Narrative generated (1292 chars)
+
+  [HOOK PreToolUse]  BLOCKED  close_alert({'alert_id': 'ALR-106B2CD00C', 'disposition': 'FALSE_POSITIVE'})
+                     reason: PMLA 2002 / RBI KYC Master Direction 2025: alert disposition requires human analyst sign-off.
+
+  [HOOK PreToolUse]  BLOCKED  close_alert({'alert_id': 'ALR-106B2CD00C', 'disposition': 'TRUE_MATCH'})
+                     reason: PMLA 2002 / RBI KYC Master Direction 2025: alert disposition requires human analyst sign-off.
+
+  [HOOK PreToolUse]  BLOCKED  close_alert({'alert_id': 'ALR-106B2CD00C', 'disposition': 'ESCALATED'})
+                     reason: PMLA 2002 / RBI KYC Master Direction 2025: alert disposition requires human analyst sign-off.
+INFO:     127.0.0.1:56307 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56307 - "GET /static/css/workflow.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:63014 - "GET /static/js/workflow.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:63014 - "GET /api/alerts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56307 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56307 - "GET /simulator HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63014 - "GET /static/js/simulator.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:56307 - "GET /static/css/simulator.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:56307 - "GET /api/simulator-alerts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56307 - "GET /api/simulator-run?alert_id=ALR-DBAC1AEF35 HTTP/1.1" 200 OK
+
+██████████████████████████████████████████████████████████████████████
+ HYBRID ORCHESTRATOR  —  alert ALR-DBAC1AEF35
+ LLM    : llama-3.1-8b-instant  @  https://api.groq.com/openai/v1
+ Scoring: rule-based (deterministic)
+██████████████████████████████████████████████████████████████████████
+
+────────────────────────────────────────────────────────────
+ PHASE 1: LLM investigation (Groq llama-3.1-8b-instant)
+────────────────────────────────────────────────────────────
+
+  [LLM] step 1
+  [LLM → screening_api_lookup]  args={'alert_id': 'ALR-DBAC1AEF35'}
+
+  [Tool: screening_api_lookup]
+    Alert ID    : ALR-DBAC1AEF35
+    Entity name : ARTEMIS
+    DB hits     : 5 real records in sanctions.db
+    Top hit     : ARTEMIS OFFSHORE  [ofac_full_xml / PEESA-EO14039,RUSSIA-EO14024]
+  [LLM → core_banking_get_customer]  args={'customer_id': 'CUST-0361'}
+    ⚠ Customer CUST-0361 not found in DynamoDB customer_kyc
+  [LLM → get_adverse_media]  args={'customer_id': 'CUST-0361', 'customer_name': 'John Doe'}
+
+  [Tool: get_adverse_media]
+    Customer    : CUST-0361  (John Doe)
+    Media hits  : 0
+  [LLM → get_ubo_chain]  args={'customer_id': 'CUST-0361', 'entity_name': 'Roman Ivanovitj MELNIK'}
+
+  [Tool: get_ubo_chain]
+    Customer    : CUST-0361
+    Entity      : Roman Ivanovitj MELNIK
+    UBO chain   : none
+  [LLM → case_management_prior_cases]  args={'name': 'John Doe'}
+
+  [Tool: case_management_prior_cases]
+    Name queried : John Doe
+    Cases found  : 0
+    Clearances   : 0
+    Escalations  : 0
+  [LLM → get_company_registry]  args={'entity_name': 'Roman Ivanovitj MELNIK'}
+
+  [Tool: get_company_registry]
+    Entity      : Roman Ivanovitj MELNIK
+    Registry    : 0 match(es)
+
+  [LLM] step 2
+  [LLM] data gathering complete: DONE
+  [fallback] core_banking_get_customer  customer_id=CUST-0115
+
+  [Tool: core_banking_get_customer]
+    Customer ID   : CUST-0115
+    Name          : Hashim Akkad
+    Risk rating   : MEDIUM
+    Transactions  : 0
+    Large (>5L)   : 0
+    Intl/wire     : 0
+  [correct-args] get_adverse_media  name='Hashim Akkad'
+
+  [Tool: get_adverse_media]
+    Customer    : CUST-0115  (Hashim Akkad)
+    Media hits  : 0
+  [correct-args] get_ubo_chain      entity='ARTEMIS'
+
+  [Tool: get_ubo_chain]
+    Customer    : CUST-0115
+    Entity      : ARTEMIS
+    UBO chain   : none
+  [correct-args] case_management_prior_cases  name='Hashim Akkad'
+
+  [Tool: case_management_prior_cases]
+    Name queried : Hashim Akkad
+    Cases found  : 0
+    Clearances   : 0
+    Escalations  : 0
+  [correct-args] get_company_registry         entity='ARTEMIS'
+
+  [Tool: get_company_registry]
+    Entity      : ARTEMIS
+    Registry    : 0 match(es)
+
+────────────────────────────────────────────────────────────
+ PHASE 2: rule-based scoring
+────────────────────────────────────────────────────────────
+  base=0.501  +context=+0.000  +confidence_adj=+0.000  →  final=0.501
+  Score    : 0.501
+  Verdict  : FALSE_POSITIVE
+  Confidence: 50%
+
+────────────────────────────────────────────────────────────
+ PHASE 3: LLM narrative
+────────────────────────────────────────────────────────────
+  Narrative generated (1296 chars)
+
+  [HOOK PreToolUse]  BLOCKED  close_alert({'alert_id': 'ALR-DBAC1AEF35', 'disposition': 'FALSE_POSITIVE'})
+                     reason: PMLA 2002 / RBI KYC Master Direction 2025: alert disposition requires human analyst sign-off.
+
+  [HOOK PreToolUse]  BLOCKED  close_alert({'alert_id': 'ALR-DBAC1AEF35', 'disposition': 'TRUE_MATCH'})
+                     reason: PMLA 2002 / RBI KYC Master Direction 2025: alert disposition requires human analyst sign-off.
+
+  [HOOK PreToolUse]  BLOCKED  close_alert({'alert_id': 'ALR-DBAC1AEF35', 'disposition': 'ESCALATED'})
+                     reason: PMLA 2002 / RBI KYC Master Direction 2025: alert disposition requires human analyst sign-off.
+INFO:     127.0.0.1:52700 - "GET /api/simulator-alerts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61783 - "GET /api/simulator-run?alert_id=ALR-DBAC1AEF35 HTTP/1.1" 200 OK

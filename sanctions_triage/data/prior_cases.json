@@ -1,0 +1,137 @@
+[
+  {
+    "case_id": "CASE-2024-00118",
+    "name_queried": "نبيل الحسن",
+    "alert_id": "ALR-OLD-A1",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-04",
+    "resolved_at": "2024-09-12T11:04:00Z",
+    "resolution_note": "Common Arabic name — match was on transliteration noise only. DOB and nationality did not align with sanctioned entity."
+  },
+  {
+    "case_id": "CASE-2024-00203",
+    "name_queried": "نبيل الحسن",
+    "alert_id": "ALR-OLD-A2",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-02",
+    "resolved_at": "2024-11-30T09:48:00Z",
+    "resolution_note": "Customer is a long-standing low-risk personal account; tenure >5 years, salary credits only."
+  },
+  {
+    "case_id": "CASE-2025-00041",
+    "name_queried": "نبيل الحسن",
+    "alert_id": "ALR-OLD-A3",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-05",
+    "resolved_at": "2025-02-14T15:22:00Z",
+    "resolution_note": "Recurrent match against EU Consolidated — same false-positive pattern as CASE-2024-00118."
+  },
+  {
+    "case_id": "CASE-2025-00099",
+    "name_queried": "نبيل الحسن",
+    "alert_id": "ALR-OLD-A4",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-01",
+    "resolved_at": "2025-04-03T10:11:00Z",
+    "resolution_note": "Cleared after secondary ID review (passport vs national ID); confirmed distinct individual."
+  },
+  {
+    "case_id": "CASE-2025-00155",
+    "name_queried": "نبيل الحسن",
+    "alert_id": "ALR-OLD-A5",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-03",
+    "resolved_at": "2025-06-22T16:40:00Z",
+    "resolution_note": "Auto-screening picked up partial token overlap; cleared on transliteration check."
+  },
+  {
+    "case_id": "CASE-2025-00211",
+    "name_queried": "نبيل الحسن",
+    "alert_id": "ALR-OLD-A6",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-02",
+    "resolved_at": "2025-09-09T12:08:00Z",
+    "resolution_note": "Sanctioned entity is corporate (PJSC); customer is a personal account. Type mismatch confirms clearance."
+  },
+  {
+    "case_id": "CASE-2025-00278",
+    "name_queried": "نبيل الحسن",
+    "alert_id": "ALR-OLD-A7",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-04",
+    "resolved_at": "2026-01-15T09:30:00Z",
+    "resolution_note": "Periodic re-screen — no new adverse media; transaction profile remains within KYC baseline."
+  },
+  {
+    "case_id": "CASE-2025-00073",
+    "name_queried": "Green Corporation",
+    "alert_id": "ALR-OLD-G1",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-05",
+    "resolved_at": "2025-03-19T13:55:00Z",
+    "resolution_note": "Generic corporate name — match was against a Mexican individual's nominee structure. Distinct entity confirmed via registration number."
+  },
+  {
+    "case_id": "CASE-2025-00188",
+    "name_queried": "Green Corporation",
+    "alert_id": "ALR-OLD-G2",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-03",
+    "resolved_at": "2025-08-04T11:02:00Z",
+    "resolution_note": "Common name in corporate registries; verified through CIN and director KYC."
+  },
+  {
+    "case_id": "CASE-2025-00264",
+    "name_queried": "Green Corporation",
+    "alert_id": "ALR-OLD-G3",
+    "resolution": "ESCALATED",
+    "resolved_by": "ANALYST-01",
+    "resolved_at": "2025-11-28T17:25:00Z",
+    "resolution_note": "Beneficial-owner change triggered EDD; structure flagged to FIU. Re-screen window: 90 days."
+  },
+  {
+    "case_id": "CASE-2025-PRIYA-001",
+    "name_queried": "Priya Sharma",
+    "alert_id": "ALR-OLD-PRIYA-1",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-04",
+    "resolved_at": "2026-04-18T08:56:27.409500+00:00",
+    "resolution_note": "Common Indian name. Customer is a marketing professional with stable salary credits."
+  },
+  {
+    "case_id": "CASE-2025-PRIYA-002",
+    "name_queried": "Priya Sharma",
+    "alert_id": "ALR-OLD-PRIYA-2",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-03",
+    "resolved_at": "2026-03-19T08:56:27.409500+00:00",
+    "resolution_note": "Cross-verified with PAN; no match to sanctioned entity. Different DOB."
+  },
+  {
+    "case_id": "CASE-2025-PRIYA-003",
+    "name_queried": "Priya Sharma",
+    "alert_id": "ALR-OLD-PRIYA-3",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-04",
+    "resolved_at": "2026-02-17T08:56:27.409500+00:00",
+    "resolution_note": "Re-screen after periodic review — pattern unchanged; cleared."
+  },
+  {
+    "case_id": "CASE-2025-PRIYA-004",
+    "name_queried": "Priya Sharma",
+    "alert_id": "ALR-OLD-PRIYA-4",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-05",
+    "resolved_at": "2026-01-18T08:56:27.409500+00:00",
+    "resolution_note": "Tenure >3 years, no high-risk transactions. Auto-cleared by L1."
+  },
+  {
+    "case_id": "CASE-2025-PRIYA-005",
+    "name_queried": "Priya Sharma",
+    "alert_id": "ALR-OLD-PRIYA-5",
+    "resolution": "FALSE_POSITIVE",
+    "resolved_by": "ANALYST-02",
+    "resolved_at": "2025-12-19T08:56:27.409500+00:00",
+    "resolution_note": "Latest quarterly screen — still clear, no adverse media."
+  }
+]

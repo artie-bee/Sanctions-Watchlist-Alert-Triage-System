@@ -1,0 +1,46 @@
+============================================================
+  Sanctions Triage — Demo Data Seeding
+============================================================
+
+[0/8] Ensuring DynamoDB tables exist
+
+[1/8] Deleting random Faker customers (CUST-*)
+  Deleted 0 random Faker customers (CUST-*)
+
+[2/8] Seeding deliberate customers from sanctions.db pool (200 entities)
+  Seeded 200 deliberate customers
+    Variant A: 80
+    Variant B: 70
+    Variant C: 25
+    Variant D: 20
+    Variant E: 5
+
+[3/8] Seeding 6 named demo personas (DEMO-001..006)
+  Seeded DEMO-001 Mohammed Ali Hassan            → expected FALSE_POSITIVE
+  Seeded DEMO-002 Rajesh Kumar                   → expected UNCERTAIN
+  Seeded DEMO-003 Vladimir Petrov                → expected LIKELY_MATCH
+  Seeded DEMO-004 Ibrahim Al Hassan              → expected ESCALATE
+  Seeded DEMO-005 Priya Sharma                   → expected FALSE_POSITIVE
+  Seeded DEMO-006 Hassan Nasir Al Maliki         → expected TRUE_MATCH
+[4/8] SKIPPED — transactions (run separately)
+
+[5/8] Seeding historical alerts (~2,500)
+  Seeded 2,500 historical alerts
+
+[6/8] Seeding prior-case history for Priya Sharma
+  Seeded 5 prior cases for Priya Sharma → prior_cases.json
+
+[7/8] Seeding adverse media for Hassan Nasir Al Maliki
+  Seeded 1 adverse media record for Hassan Nasir Al Maliki
+
+[8/8] Done.
+============================================================
+  200 deliberate customers
+  6 named demo personas (DEMO-001..006)
+  0 transactions
+  2,500 historical alerts
+  5 prior cases for Priya Sharma
+  1 adverse media for Hassan Nasir Al Maliki
+============================================================
+
+Elapsed: 131.8s

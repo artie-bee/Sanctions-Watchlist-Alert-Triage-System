@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sanctions Triage — Live</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2128;
+    --border: #30363d;
+    --fg: #c9d1d9;
+    --fg-dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #2ea043;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #a371f7;
+    --flash: #f0883e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 13px; line-height: 1.45;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header h1 .sub { color: var(--fg-dim); font-weight: 400; }
+  header button {
+    background: var(--accent); border: none; color: #0d1117;
+    padding: 7px 14px; border-radius: 6px;
+    cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600;
+  }
+  header button.secondary { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); }
+  header button:disabled { opacity: 0.5; cursor: not-allowed; }
+  header .status { margin-left: auto; color: var(--fg-dim); font-size: 12px; }
+  header .status .dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--fg-dim); margin-right: 6px;
+    vertical-align: middle;
+  }
+  header .status.running .dot { background: var(--flash); animation: pulse 1s infinite; }
+  header .status.done .dot     { background: var(--green); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  main {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 14px; padding: 16px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .card-head {
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    background: var(--panel-2);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .card-head .alert-id {
+    font-size: 11px; color: var(--fg-dim);
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .card-head .customer {
+    font-weight: 600; flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .scenario { font-size: 10px; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .scenario.false_positive { background: rgba(46,160,67,0.15); color: var(--green); }
+  .scenario.uncertain      { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .scenario.true_match     { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  .entity-row {
+    padding: 6px 12px; font-size: 11px; color: var(--fg-dim);
+    border-bottom: 1px solid var(--border);
+  }
+  .entity-row b { color: var(--fg); font-weight: 500; }
+
+  .phases { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .phase {
+    flex: 1; padding: 6px 8px; border-radius: 4px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    font-size: 11px; color: var(--fg-dim);
+    text-align: center; transition: all 0.2s;
+  }
+  .phase.active {
+    background: rgba(88,166,255,0.15); border-color: var(--accent); color: var(--accent);
+    animation: pulse 1.2s infinite;
+  }
+  .phase.done {
+    background: rgba(46,160,67,0.1); border-color: var(--green); color: var(--green);
+    animation: none;
+  }
+  .phase .n { font-weight: 700; margin-right: 4px; }
+
+  .current {
+    padding: 8px 12px; font-size: 11px;
+    color: var(--flash); min-height: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .current:empty::after { content: "idle"; color: var(--fg-dim); }
+  .current .tool { font-weight: 600; }
+
+  .tools-log {
+    padding: 6px 12px; border-bottom: 1px solid var(--border);
+    max-height: 140px; overflow-y: auto;
+    font-size: 11px;
+  }
+  .tool-row {
+    display: flex; gap: 6px; align-items: center;
+    padding: 2px 0;
+  }
+  .tool-row .icon { width: 14px; text-align: center; }
+  .tool-row.pending .icon { color: var(--yellow); }
+  .tool-row.done    .icon { color: var(--green); }
+  .tool-row.blocked .icon { color: var(--red); }
+  .tool-row.error   .icon { color: var(--red); }
+  .tool-row .name { color: var(--fg); }
+  .tool-row .dur  { color: var(--fg-dim); margin-left: auto; }
+  .tool-row .hash { color: var(--purple); font-size: 10px; margin-left: 8px; }
+
+  details.audit {
+    border-bottom: 1px solid var(--border);
+  }
+  details.audit summary {
+    padding: 6px 12px; cursor: pointer; font-size: 11px; color: var(--fg-dim);
+    user-select: none;
+  }
+  details.audit summary:hover { color: var(--fg); }
+  .audit-entries {
+    padding: 0 12px 8px; max-height: 200px; overflow-y: auto;
+    font-size: 10px; font-family: ui-monospace, Menlo, monospace;
+  }
+  .audit-entry {
+    padding: 3px 0; border-bottom: 1px dashed var(--border);
+    color: var(--fg-dim);
+  }
+  .audit-entry .ts { color: var(--accent); }
+  .audit-entry .ev { color: var(--purple); }
+  .audit-entry.blocked .ev { color: var(--red); }
+  .audit-entry .h  { color: var(--purple); }
+
+  .verdict {
+    padding: 12px; border-top: 1px solid var(--border);
+    background: var(--panel-2);
+  }
+  .verdict .row {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .badge {
+    padding: 4px 10px; border-radius: 4px; font-weight: 700;
+    font-size: 11px; letter-spacing: 0.5px;
+  }
+  .badge.TRUE_MATCH     { background: var(--red); color: white; }
+  .badge.UNCERTAIN      { background: var(--yellow); color: #0d1117; }
+  .badge.FALSE_POSITIVE { background: var(--green); color: white; }
+
+  .score-bar {
+    flex: 1; height: 8px; background: var(--border);
+    border-radius: 4px; overflow: hidden; min-width: 100px;
+  }
+  .score-bar .fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--yellow), var(--red)); transition: width 0.4s; }
+  .score-num { color: var(--fg); font-weight: 600; }
+
+  .verdict .narrative {
+    margin-top: 6px; font-size: 11px; color: var(--fg);
+    background: var(--bg); padding: 8px 10px; border-radius: 4px;
+    border-left: 2px solid var(--accent);
+    white-space: pre-wrap; line-height: 1.5;
+    max-height: 200px; overflow-y: auto;
+  }
+  .verdict .blocked-actions {
+    margin-top: 8px; font-size: 10px; color: var(--red);
+  }
+  .verdict .blocked-actions div { padding: 2px 0; }
+  .verdict .kyc {
+    font-size: 11px; color: var(--fg-dim); margin-top: 4px;
+  }
+  .verdict .kyc b { color: var(--fg); font-weight: 500; }
+
+  .empty-state {
+    padding: 80px 20px; text-align: center; color: var(--fg-dim);
+    grid-column: 1 / -1;
+  }
+  .empty-state h2 { color: var(--fg); margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sanctions Triage <span class="sub">— live agent workflow</span></h1>
+  <button id="run-btn">Run 10 alerts</button>
+  <button id="reload-btn" class="secondary" title="Pull a fresh 10 from DynamoDB">Regenerate</button>
+  <div class="status" id="status"><span class="dot"></span><span id="status-text">ready</span></div>
+</header>
+<main id="grid">
+  <div class="empty-state">
+    <h2>No alerts loaded yet</h2>
+    <p>Click <b>Run 10 alerts</b> to pull 10 PENDING alerts from DynamoDB and watch the triage agent process them in parallel.</p>
+  </div>
+</main>
+
+<script>
+const PHASE_LABEL = { 1: "LLM evidence", 2: "Rule scoring", 3: "LLM narrative" };
+const TOOL_ORDER = [
+  "screening_api_lookup",
+  "core_banking_get_customer",
+  "get_adverse_media",
+  "get_ubo_chain",
+  "case_management_prior_cases",
+  "get_company_registry",
+];
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const grid = $("#grid");
+const runBtn = $("#run-btn");
+const reloadBtn = $("#reload-btn");
+const statusEl = $("#status");
+const statusText = $("#status-text");
+
+function setStatus(text, cls) {
+  statusText.textContent = text;
+  statusEl.className = "status " + (cls || "");
+}
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function renderCard(a) {
+  const cid = `c-${a.alert_id}`;
+  const scenario = (a.scenario || "uncertain").toLowerCase();
+  const score = Number(a.match_score || a.confidence || 0);
+  const card = document.createElement("article");
+  card.className = "card";
+  card.id = cid;
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="alert-id">${esc(a.alert_id)}</span>
+      <span class="customer" title="${esc(a.customer_name)}">${esc(a.customer_name || "—")}</span>
+      <span class="scenario ${scenario}">${esc(scenario.replace("_"," "))}</span>
+    </div>
+    <div class="entity-row">
+      <b>Matched:</b> ${esc(a.matched_entity || "—")}
+      &nbsp;·&nbsp; <b>List:</b> ${esc(a.source_list || "—")}
+      &nbsp;·&nbsp; <b>Score:</b> ${score.toFixed(3)}
+    </div>
+    <div class="phases">
+      <div class="phase" data-phase="1"><span class="n">1</span>LLM</div>
+      <div class="phase" data-phase="2"><span class="n">2</span>Score</div>
+      <div class="phase" data-phase="3"><span class="n">3</span>Narrate</div>
+    </div>
+    <div class="current"></div>
+    <div class="tools-log"></div>
+    <details class="audit">
+      <summary>Audit log <span class="audit-count">(0)</span></summary>
+      <div class="audit-entries"></div>
+    </details>
+    <div class="verdict" style="display:none;"></div>
+  `;
+  // Pre-create rows for the 6 evidence tools so they appear in order.
+  const log = $(".tools-log", card);
+  TOOL_ORDER.forEach(t => {
+    const row = document.createElement("div");
+    row.className = "tool-row";
+    row.dataset.tool = t;
+    row.innerHTML = `<span class="icon">·</span><span class="name">${t}</span><span class="dur"></span>`;
+    log.appendChild(row);
+  });
+  return card;
+}
+
+function setPhase(card, phase, state) {
+  card.querySelectorAll(".phase").forEach(p => {
+    const n = Number(p.dataset.phase);
+    if (n < phase) p.classList.add("done"), p.classList.remove("active");
+    else if (n === phase) {
+      p.classList.toggle("active", state === "active");
+      p.classList.toggle("done", state === "done");
+    } else { p.classList.remove("active"); p.classList.remove("done"); }
+  });
+}
+
+function setCurrent(card, text) {
+  $(".current", card).innerHTML = text || "";
+}
+
+function setToolRow(card, tool, state, extra = {}) {
+  let row = card.querySelector(`.tool-row[data-tool="${tool}"]`);
+  if (!row) {
+    row = document.createElement("div");
+    row.className = "tool-row";
+    row.dataset.tool = tool;
+    row.innerHTML = `<span class="icon">·</span><span class="name">${tool}</span><span class="dur"></span>`;
+    $(".tools-log", card).appendChild(row);
+  }
+  row.classList.remove("pending","done","blocked","error");
+  row.classList.add(state);
+  const icon = state === "done" ? "✓"
+    : state === "blocked" ? "⛔"
+    : state === "error"   ? "!"
+    : "·";
+  $(".icon", row).textContent = icon;
+  if (extra.duration_ms != null) $(".dur", row).textContent = `${Math.round(extra.duration_ms)}ms`;
+  if (extra.sha256) {
+    let h = row.querySelector(".hash");
+    if (!h) { h = document.createElement("span"); h.className = "hash"; row.appendChild(h); }
+    h.textContent = extra.sha256.slice(0, 8);
+  }
+}
+
+function addAudit(card, event) {
+  const wrap = $(".audit-entries", card);
+  const e = document.createElement("div");
+  const isBlocked = event.type === "tool_blocked";
+  e.className = "audit-entry" + (isBlocked ? " blocked" : "");
+  const ts = (event.ts || "").split("T")[1]?.slice(0, 12) || "";
+  const tool = event.tool || "";
+  const sha = (event.sha256 || "").slice(0, 16);
+  const evName = isBlocked ? "BLOCKED" : (event.type || "").replace("tool_call_end", "tool_call");
+  e.innerHTML = `<span class="ts">${esc(ts)}</span>
+    <span class="ev">${esc(evName)}</span>
+    <b>${esc(tool)}</b>
+    ${sha ? `<span class="h">${esc(sha)}</span>` : ""}`;
+  wrap.appendChild(e);
+  wrap.scrollTop = wrap.scrollHeight;
+  const count = wrap.children.length;
+  $(".audit-count", card).textContent = `(${count})`;
+}
+
+function renderVerdict(card, ws) {
+  const v = $(".verdict", card);
+  v.style.display = "";
+  const recPct = Math.round((ws.final_risk_score || 0) * 100);
+  const kyc = ws.kyc_summary || {};
+  const tx  = ws.transactions || {};
+  const pc  = ws.prior_cases || {};
+  v.innerHTML = `
+    <div class="row">
+      <span class="badge ${esc(ws.recommendation)}">${esc(ws.recommendation)}</span>
+      <span class="score-num">${(ws.final_risk_score || 0).toFixed(3)} (${recPct}%)</span>
+      <div class="score-bar"><div class="fill" style="width:${recPct}%"></div></div>
+    </div>
+    <div class="kyc">
+      <b>KYC:</b> ${esc(kyc.risk_rating || "?")} · ${esc(kyc.nationality || "?")} · ${esc(kyc.occupation || "")}
+      &nbsp;·&nbsp; <b>Txn:</b> ${tx.total||0} (${tx.large_count||0} lg, ${tx.international_count||0} intl)
+      &nbsp;·&nbsp; <b>Adverse:</b> ${ws.adverse_media_count||0}
+      &nbsp;·&nbsp; <b>UBO:</b> ${ws.ubo_chain_found ? "yes" : "no"}
+      &nbsp;·&nbsp; <b>Prior:</b> ${pc.prior_clearances||0}c / ${pc.prior_escalations||0}e
+    </div>
+    <div class="narrative">${esc(ws.narrative || "(no narrative)")}</div>
+    ${(ws.blocked_actions || []).length ? `
+      <div class="blocked-actions">
+        ${ws.blocked_actions.map(b => `<div>⛔ ${esc(b)}</div>`).join("")}
+      </div>` : ""}
+  `;
+}
+
+let evtSource = null;
+
+async function loadAlerts(regenerate) {
+  setStatus(regenerate ? "regenerating from DynamoDB…" : "loading alerts…", "running");
+  const url = "/triage/alerts" + (regenerate ? "?regenerate=true" : "");
+  const r = await fetch(url);
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`/triage/alerts failed: ${r.status} ${t}`);
+  }
+  return await r.json();
+}
+
+function renderGrid(alerts) {
+  grid.innerHTML = "";
+  alerts.forEach(a => grid.appendChild(renderCard(a)));
+}
+
+function dispatchEvent(event) {
+  const card = document.getElementById(`c-${event.alert_id}`);
+  if (!card) return;
+  switch (event.type) {
+    case "run_start":
+      setCurrent(card, `<span class="tool">starting · ${esc(event.model || "")}</span>`);
+      break;
+    case "phase_start":
+      setPhase(card, event.phase, "active");
+      setCurrent(card, `<b>Phase ${event.phase}:</b> ${esc(event.label || PHASE_LABEL[event.phase] || "")}`);
+      break;
+    case "phase_end":
+      setPhase(card, event.phase, "done");
+      break;
+    case "llm_step":
+      setCurrent(card, `<b>Phase 1:</b> LLM step ${event.step} — choosing next tool…`);
+      break;
+    case "tool_call_start":
+      setToolRow(card, event.tool, "pending");
+      setCurrent(card, `Calling <span class="tool">${esc(event.tool)}</span>…`);
+      addAudit(card, event);
+      break;
+    case "tool_call_end":
+      setToolRow(card, event.tool, "done", {
+        duration_ms: event.duration_ms, sha256: event.sha256,
+      });
+      addAudit(card, event);
+      break;
+    case "tool_blocked":
+      setToolRow(card, event.tool, "blocked", { sha256: event.sha256 });
+      addAudit(card, event);
+      break;
+    case "defensive_fill_start":
+      setCurrent(card, `<b>Phase 1:</b> defensive fill — re-running any skipped tools…`);
+      break;
+    case "score":
+      setCurrent(card, `<b>Phase 2:</b> final=${event.final_risk_score?.toFixed(3)} → ${esc(event.recommendation)}`);
+      break;
+    case "narrative":
+      setCurrent(card, `<b>Phase 3:</b> narrative ready (${(event.text||"").length} chars)`);
+      break;
+    case "worksheet":
+      renderVerdict(card, event.worksheet);
+      break;
+    case "done":
+      setCurrent(card, `<span style="color:var(--green)">done</span>`);
+      setPhase(card, 3, "done");
+      break;
+    case "error":
+      setCurrent(card, `<span style="color:var(--red)">ERROR: ${esc(event.error)}</span>`);
+      break;
+  }
+}
+
+async function run({ regenerate }) {
+  if (evtSource) { evtSource.close(); evtSource = null; }
+  runBtn.disabled = true; reloadBtn.disabled = true;
+  try {
+    const alerts = await loadAlerts(regenerate);
+    if (!alerts.length) throw new Error("no alerts returned");
+    renderGrid(alerts);
+    const ids = alerts.map(a => a.alert_id).join(",");
+    setStatus(`running ${alerts.length} alerts in parallel…`, "running");
+    evtSource = new EventSource(`/triage/run?alert_ids=${encodeURIComponent(ids)}`);
+    evtSource.onmessage = (ev) => {
+      try {
+        const event = JSON.parse(ev.data);
+        if (event.type === "all_done") {
+          setStatus("all alerts complete", "done");
+          evtSource.close(); evtSource = null;
+          runBtn.disabled = false; reloadBtn.disabled = false;
+          return;
+        }
+        dispatchEvent(event);
+      } catch (e) { console.warn("bad SSE payload:", ev.data, e); }
+    };
+    evtSource.onerror = (e) => {
+      setStatus("stream error — see console", "");
+      console.error("SSE error", e);
+      runBtn.disabled = false; reloadBtn.disabled = false;
+    };
+  } catch (e) {
+    setStatus(`error: ${e.message}`, "");
+    runBtn.disabled = false; reloadBtn.disabled = false;
+  }
+}
+
+runBtn.addEventListener("click",    () => run({ regenerate: false }));
+reloadBtn.addEventListener("click", () => run({ regenerate: true }));
+</script>
+</body>
+</html>

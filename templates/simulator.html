@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sentinel · Multi-Agent Simulator</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/static/css/simulator.css" />
+</head>
+<body>
+
+  <!-- ── TOP BAR ─────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-name">Sentinel</div>
+          <div class="brand-sub">Multi-Agent Simulator</div>
+        </div>
+      </div>
+      <div class="stream-pill" id="stream-pill">
+        <span class="stream-dot"></span>
+        <span id="stream-status">idle</span>
+      </div>
+    </div>
+
+    <div class="topbar-stats">
+      <div class="stat">
+        <div class="stat-label">PROCESSED</div>
+        <div class="stat-value" id="kpi-processed">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill" id="trend-processed"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">TOOLS FIRED</div>
+        <div class="stat-value" id="kpi-tools">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill" id="trend-tools"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">LOOPS</div>
+        <div class="stat-value" id="kpi-loops">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill amber" id="trend-loops"></div></div>
+      </div>
+      <div class="stat kpi-tm">
+        <div class="stat-label">TRUE MATCH</div>
+        <div class="stat-value" id="kpi-tm">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill red" id="trend-tm"></div></div>
+      </div>
+      <div class="stat kpi-clear">
+        <div class="stat-label">CLEARED</div>
+        <div class="stat-value" id="kpi-clear">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill amber" id="trend-clear"></div></div>
+      </div>
+      <div class="stat kpi-fp">
+        <div class="stat-label">FALSE POS</div>
+        <div class="stat-value" id="kpi-fp">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill green" id="trend-fp"></div></div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div class="sla-timer mono" id="sla-timer">0.0s / 25s</div>
+      <select id="scenario-select" class="ctl-select" title="Scenario">
+        <option value="auto">Auto-rotate</option>
+      </select>
+      <select id="speed-select" class="ctl-select" title="Playback speed">
+        <option value="slow">Slow</option>
+        <option value="normal" selected>Normal</option>
+        <option value="fast">Fast</option>
+      </select>
+      <button id="auto-btn" class="btn-ghost" type="button" title="Cycle through scenarios">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <span>Auto-Play</span>
+      </button>
+      <button id="reset-btn" class="btn-ghost" type="button" title="Reset stage">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+        <span>Reset</span>
+      </button>
+      <button id="run-btn" class="btn-primary" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Send Alert</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── MAIN ────────────────────────────────────────────── -->
+  <main class="layout">
+
+    <!-- LEFT RAIL · Alert Queue -->
+    <aside class="rail rail-left">
+      <div class="rail-head">
+        <div class="rail-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          Alert Queue
+        </div>
+        <div class="rail-sub" id="intake-count">— alerts</div>
+      </div>
+      <div class="intake-stream" id="intake-stream">
+        <div class="intake-empty mono">loading…</div>
+      </div>
+    </aside>
+
+    <!-- CENTER · Agent Flow Stage -->
+    <section class="canvas">
+      <div class="view view-active">
+
+        <!-- Alert hero -->
+        <div class="alert-hero" id="alert-hero">
+          <div class="alert-hero-top">
+            <span class="alert-scenario-badge" id="alert-scenario">—</span>
+            <span class="alert-customer-name" id="alert-customer">—</span>
+            <span class="alert-match-badge" id="alert-match">—</span>
+          </div>
+          <div class="alert-attrs" id="alert-attrs"></div>
+        </div>
+
+        <!-- Infra row -->
+        <div class="infra-row" id="infra-row">
+          <div class="infra-pill" data-infra="api-gw">
+            <span class="infra-dot"></span>
+            <span>API Gateway</span>
+          </div>
+          <div class="infra-arrow">→</div>
+          <div class="infra-pill" data-infra="sqs">
+            <span class="infra-dot"></span>
+            <span>SQS</span>
+          </div>
+          <div class="infra-arrow">→</div>
+          <div class="infra-pill" data-infra="lambda">
+            <span class="infra-dot"></span>
+            <span>Lambda</span>
+          </div>
+          <div class="infra-trailing mono">DynamoDB · sanctions.db · Groq llama-3.1-8b-instant</div>
+        </div>
+
+        <!-- Supervisor -->
+        <div class="supervisor-node" id="node-supervisor" data-state="pending">
+          <div class="supervisor-badge">
+            <span class="supervisor-dot" id="supervisor-dot"></span>
+            <span>Supervisor · Claude Sonnet 4.6</span>
+          </div>
+          <div class="supervisor-reasoning" id="supervisor-reasoning">
+            Awaiting alert — supervisor will reason through investigation plan.
+          </div>
+        </div>
+
+        <div class="flow-arrow" id="arrow-1">↓</div>
+
+        <!-- Three sub-agent cards -->
+        <div class="subagents">
+
+          <div class="agent-card" id="node-retrieval" data-state="pending">
+            <div class="agent-head">Retrieval · Claude Haiku</div>
+            <div class="agent-role">Internal Data</div>
+            <ul class="tool-list">
+              <li data-tool="screening_api_lookup">screening_api_lookup</li>
+              <li data-tool="core_banking_get_customer">core_banking_get_customer</li>
+              <li data-tool="case_management_prior_cases">case_management_prior_cases</li>
+            </ul>
+          </div>
+
+          <div class="agent-card" id="node-enrichment" data-state="pending">
+            <div class="agent-head">Enrichment · Claude Sonnet</div>
+            <div class="agent-role">External Signals</div>
+            <div class="guardrails-banner" id="guardrails-banner">
+              🔒 Guardrails active · PAN / Aadhaar / DOB redacted · Prompt-injection scrubber running
+            </div>
+            <ul class="tool-list">
+              <li data-tool="get_adverse_media">get_adverse_media</li>
+              <li data-tool="get_company_registry">get_company_registry</li>
+              <li data-tool="get_ubo_chain">get_ubo_chain</li>
+            </ul>
+          </div>
+
+          <div class="agent-card" id="node-scoring" data-state="pending">
+            <div class="agent-head">Scoring · Rule Engine</div>
+            <div class="agent-role">5-Attribute Risk</div>
+            <table class="scoring-table" id="scoring-table">
+              <tbody>
+                <tr data-attr="name">
+                  <td class="attr">Name</td>
+                  <td class="weight">0.30</td>
+                  <td class="status">—</td>
+                </tr>
+                <tr data-attr="dob">
+                  <td class="attr">DOB</td>
+                  <td class="weight">0.25</td>
+                  <td class="status">—</td>
+                </tr>
+                <tr data-attr="nationality">
+                  <td class="attr">Nationality</td>
+                  <td class="weight">0.20</td>
+                  <td class="status">—</td>
+                </tr>
+                <tr data-attr="location">
+                  <td class="attr">Location</td>
+                  <td class="weight">0.10</td>
+                  <td class="status">—</td>
+                </tr>
+                <tr data-attr="prior">
+                  <td class="attr">Prior History</td>
+                  <td class="weight">0.15</td>
+                  <td class="status">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+        <!-- Loop banner -->
+        <div class="loop-banner" id="loop-banner"></div>
+
+        <div class="flow-arrow" id="arrow-2">↓</div>
+
+        <!-- Supervisor final check -->
+        <div class="supervisor-final" id="node-supervisor-final" data-state="pending">
+          <div class="supervisor-final-head">
+            <span class="mono">Supervisor · Final Decision Gate</span>
+          </div>
+          <div class="supervisor-final-flags">
+            <span class="flag-pill" id="freeze-flag">freeze: —</span>
+            <span class="flag-pill" id="str-flag">STR: —</span>
+          </div>
+        </div>
+
+        <!-- STR-draft -->
+        <div class="str-node" id="node-str" data-state="pending">
+          <div class="str-head">STR-draft · Claude Sonnet · RBI format</div>
+          <div class="str-attempt mono" id="str-attempt">—</div>
+          <div class="str-block-reason"></div>
+        </div>
+
+        <div class="flow-arrow" id="arrow-3">↓</div>
+
+        <!-- Verdict zone -->
+        <div class="verdict-zone" id="verdict-zone">
+          <div class="verdict-label">VERDICT</div>
+          <div class="verdict-pill" id="verdict-pill">—</div>
+          <div class="verdict-scores">
+            <span>base <strong id="val-base">—</strong></span>
+            <span>final <strong id="val-final">—</strong></span>
+            <span>confidence <strong id="val-conf">—</strong></span>
+          </div>
+          <div class="conf-track"><div class="conf-fill" id="conf-fill"></div></div>
+          <div class="narrative-body" id="narrative-body"></div>
+          <div class="audit-note mono">
+            ⛁ Written to S3 Object Lock · WORM · 7-year retention · CloudTrail hash logged
+          </div>
+          <div class="cost-row mono" id="cost-row"></div>
+        </div>
+
+        <!-- Judge node (async) -->
+        <div class="judge-node" id="node-judge" data-state="pending">
+          <div class="judge-head">Judge · Claude Haiku · async (off critical path)</div>
+          <div class="judge-status" id="judge-status">Reviewing citation chain…</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- RIGHT RAIL · Reasoning Log -->
+    <aside class="rail rail-right">
+      <div class="rail-head">
+        <div class="rail-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+          Reasoning Log
+        </div>
+        <div class="rail-sub mono">live</div>
+      </div>
+      <div class="reasoning-log" id="reasoning-log"></div>
+    </aside>
+
+  </main>
+
+  <script src="/static/js/simulator.js"></script>
+</body>
+</html>

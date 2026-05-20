@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Workflow Visualizer · Sanctions Triage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/workflow.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <div class="brand-text">
+        <div class="brand-name">Workflow Visualizer</div>
+        <div class="brand-sub">Live agentic triage · Groq + rule scoring</div>
+      </div>
+    </div>
+    <div class="counters">
+      <div class="counter">
+        <div class="counter-label">Processed</div>
+        <div class="counter-value mono" id="ct-processed">0 / 0</div>
+      </div>
+      <div class="counter">
+        <div class="counter-label">Tools fired</div>
+        <div class="counter-value mono" id="ct-tools">0</div>
+      </div>
+      <div class="counter">
+        <div class="counter-label">Blocks</div>
+        <div class="counter-value mono" id="ct-blocks">0</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <section class="card controls">
+      <div class="controls-text">
+        <h2>Run a batch</h2>
+        <p>Pulls 10 PENDING alerts from DynamoDB (3 low · 4 mid · 3 high match&nbsp;score) and streams the hybrid orchestrator end-to-end.</p>
+      </div>
+      <button id="run-btn" class="btn-primary" type="button">Run Batch</button>
+    </section>
+
+    <section id="workflow-card" class="card workflow hidden" aria-live="polite">
+      <div class="workflow-head">
+        <div>
+          <div class="workflow-eyebrow">Current alert</div>
+          <div class="workflow-current mono" id="current-label">—</div>
+        </div>
+        <div class="status-tag" id="phase-status">idle</div>
+      </div>
+
+      <div class="phases">
+
+        <article class="phase" id="phase-1" data-state="pending">
+          <header>
+            <span class="phase-num mono">1</span>
+            <span class="phase-title">LLM evidence gathering</span>
+          </header>
+          <ul class="tools">
+            <li data-tool="screening_api_lookup" data-state="empty">
+              <span class="dot"></span>
+              <span class="tool-name">screening_api_lookup</span>
+            </li>
+            <li data-tool="core_banking_get_customer" data-state="empty">
+              <span class="dot"></span>
+              <span class="tool-name">core_banking_get_customer</span>
+            </li>
+            <li data-tool="get_adverse_media" data-state="empty">
+              <span class="dot"></span>
+              <span class="tool-name">get_adverse_media</span>
+            </li>
+            <li data-tool="get_ubo_chain" data-state="empty">
+              <span class="dot"></span>
+              <span class="tool-name">get_ubo_chain</span>
+            </li>
+            <li data-tool="case_management_prior_cases" data-state="empty">
+              <span class="dot"></span>
+              <span class="tool-name">case_management_prior_cases</span>
+            </li>
+            <li data-tool="get_company_registry" data-state="empty">
+              <span class="dot"></span>
+              <span class="tool-name">get_company_registry</span>
+            </li>
+            <li data-tool="close_alert" data-state="empty" class="close-alert-row">
+              <span class="dot"></span>
+              <span class="tool-name">close_alert</span>
+              <span class="blocked-tag">BLOCKED</span>
+            </li>
+          </ul>
+        </article>
+
+        <article class="phase" id="phase-2" data-state="pending">
+          <header>
+            <span class="phase-num mono">2</span>
+            <span class="phase-title">Rule-based scoring</span>
+          </header>
+          <div class="phase-2-body">
+            <div class="score-row">
+              <span class="score-label">base</span>
+              <span class="mono" id="score-base">—</span>
+            </div>
+            <div class="score-row">
+              <span class="score-label">final</span>
+              <span class="mono" id="score-final">—</span>
+            </div>
+            <div class="score-row verdict-row">
+              <span class="score-label">verdict</span>
+              <span class="verdict-pill mono" id="score-verdict" data-verdict="">—</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="phase" id="phase-3" data-state="pending">
+          <header>
+            <span class="phase-num mono">3</span>
+            <span class="phase-title">LLM narrative</span>
+          </header>
+          <div class="phase-3-body" id="phase-3-narrative">Awaiting verdict…</div>
+        </article>
+
+      </div>
+    </section>
+
+    <section class="card alerts-grid-card">
+      <div class="card-head">
+        <h2>Alert queue</h2>
+        <p>10 PENDING alerts · click any complete card to open its worksheet.</p>
+      </div>
+      <div class="alerts-grid" id="alerts-grid">
+        <div class="grid-empty mono">Loading…</div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-modal-close></div>
+    <div class="modal-card">
+      <header class="modal-head">
+        <h3 id="modal-title" class="mono">Worksheet</h3>
+        <button class="modal-close" data-modal-close aria-label="Close">×</button>
+      </header>
+      <div class="modal-body" id="modal-body">…</div>
+    </div>
+  </div>
+
+  <script src="/static/js/workflow.js"></script>
+</body>
+</html>

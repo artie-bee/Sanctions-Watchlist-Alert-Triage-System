@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sentinel — Sanctions Triage</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.40.0/tabler-icons.min.css">
+  <link rel="stylesheet" href="/static/css/styles.css">
+
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"></script>
+</head>
+<body hx-ext="json-enc">
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <span class="brand-name">Sentinel</span>
+      </div>
+      <nav class="nav">
+        <a class="nav-item"        href="#"><i class="ti ti-layout-dashboard"></i> Dashboard</a>
+        <a class="nav-item{% if request.url.path == '/' %} active{% endif %}" href="/"><i class="ti ti-bell"></i> Alert queue</a>
+        <a class="nav-item"        href="#"><i class="ti ti-search"></i> Screening</a>
+        <a class="nav-item"        href="#"><i class="ti ti-users"></i> Customers</a>
+        <a class="nav-item"        href="#"><i class="ti ti-file-text"></i> Audit log</a>
+        <a class="nav-item{% if request.url.path == '/demo' %} active{% endif %}" href="/demo"><i class="ti ti-bolt"></i> Demo</a>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="mono">v1.0</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script>
+    // Minimal toast + auto-refresh hooks for HTMX header triggers.
+    document.body.addEventListener("showToast", (e) => {
+      const msg = (e.detail && e.detail.value) || "Done.";
+      const t = document.createElement("div");
+      t.className = "toast";
+      t.textContent = msg;
+      document.getElementById("toast-container").appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    });
+    document.body.addEventListener("refreshQueue", () => {
+      const q = document.getElementById("queue-rows");
+      if (q && window.htmx) htmx.trigger(q, "refresh");
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sentinel · Live Observability</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/static/css/observability.css" />
+</head>
+<body>
+
+  <!-- ── Top bar ──────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-name">Sentinel</div>
+          <div class="brand-sub">Live Workflow Observability</div>
+        </div>
+      </div>
+      <div class="stream-pill" id="stream-pill">
+        <span class="stream-dot"></span>
+        <span id="stream-status">idle</span>
+      </div>
+    </div>
+
+    <div class="topbar-stats">
+      <div class="stat">
+        <div class="stat-label">Processed</div>
+        <div class="stat-value"><span id="kpi-processed">0</span><span class="stat-divider">/</span><span class="stat-sub" id="kpi-total">0</span></div>
+        <div class="stat-trend"><div class="stat-trend-fill" id="trend-processed"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Tools Fired</div>
+        <div class="stat-value" id="kpi-tools">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill" id="trend-tools"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Blocks</div>
+        <div class="stat-value" id="kpi-blocks">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill red" id="trend-blocks"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Avg Latency</div>
+        <div class="stat-value"><span id="kpi-latency">—</span><span class="stat-unit">s</span></div>
+        <div class="stat-trend"><div class="stat-trend-fill amber" id="trend-latency"></div></div>
+      </div>
+      <div class="stat kpi-tm">
+        <div class="stat-label">True Match</div>
+        <div class="stat-value" id="kpi-tm">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill red" id="trend-tm"></div></div>
+      </div>
+      <div class="stat kpi-uc">
+        <div class="stat-label">Uncertain</div>
+        <div class="stat-value" id="kpi-uc">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill amber" id="trend-uc"></div></div>
+      </div>
+      <div class="stat kpi-fp">
+        <div class="stat-label">False Positive</div>
+        <div class="stat-value" id="kpi-fp">0</div>
+        <div class="stat-trend"><div class="stat-trend-fill green" id="trend-fp"></div></div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <button id="run-btn" class="btn-primary" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Run Batch</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Main layout ──────────────────────────────────────── -->
+  <main class="layout">
+
+    <!-- ── LEFT RAIL · Alert intake ───────────────── -->
+    <aside class="rail rail-left">
+      <div class="rail-head">
+        <div class="rail-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          Live Alert Intake
+        </div>
+        <div class="rail-sub" id="intake-count">— alerts</div>
+      </div>
+      <div class="intake-stream" id="intake-stream">
+        <div class="intake-empty mono">loading…</div>
+      </div>
+    </aside>
+
+    <!-- ── CENTER CANVAS · Tabs ───────────────────── -->
+    <section class="canvas">
+
+      <nav class="tabs" id="tabs">
+        <button class="tab active" data-tab="graph">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/></svg>
+          <span>Workflow Graph</span>
+        </button>
+        <button class="tab" data-tab="payload">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <span>Alert Payload</span>
+        </button>
+        <button class="tab" data-tab="scoring">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+          <span>Rule Engine</span>
+        </button>
+        <button class="tab" data-tab="architecture">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/></svg>
+          <span>Architecture</span>
+        </button>
+      </nav>
+
+      <!-- ── View · Workflow Graph ─────────────── -->
+      <div class="view view-active" id="view-graph">
+        <div class="view-head">
+          <div>
+            <div class="view-eyebrow">HybridOrchestrator · 3-phase pipeline</div>
+            <div class="view-title mono" id="graph-current">no alert selected</div>
+          </div>
+          <div class="view-meta" id="graph-meta">—</div>
+        </div>
+
+        <div class="graph-wrap">
+          <svg class="graph" id="graph-svg" viewBox="0 0 1300 780" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <!-- Edge gradients -->
+              <linearGradient id="edge-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.5"/>
+              </linearGradient>
+              <linearGradient id="edge-active" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#60A5FA"/>
+                <stop offset="100%" stop-color="#A78BFA"/>
+              </linearGradient>
+              <linearGradient id="edge-done" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#10B981" stop-opacity="0.6"/>
+                <stop offset="100%" stop-color="#10B981" stop-opacity="0.6"/>
+              </linearGradient>
+
+              <!-- Node glow filters -->
+              <filter id="node-glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="6" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+
+              <!-- Diagonal hatch overlay (regulatory-blocked banner) -->
+              <pattern id="hatch-block" patternUnits="userSpaceOnUse" width="14" height="14" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="14" stroke="rgba(248,113,113,0.10)" stroke-width="6"/>
+              </pattern>
+
+              <!-- Arrowheads -->
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#4B5563"/>
+              </marker>
+              <marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#A78BFA"/>
+              </marker>
+              <marker id="arrow-done" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#10B981"/>
+              </marker>
+            </defs>
+
+            <!-- Edges layer (drawn first, so nodes overlap) -->
+            <g id="edges"></g>
+            <!-- Nodes layer -->
+            <g id="nodes"></g>
+          </svg>
+
+          <!-- Graph legend -->
+          <div class="graph-legend">
+            <div class="legend-item"><span class="legend-dot dot-pending"></span> Pending</div>
+            <div class="legend-item"><span class="legend-dot dot-active"></span> Active</div>
+            <div class="legend-item"><span class="legend-dot dot-done"></span> Complete</div>
+            <div class="legend-item"><span class="legend-dot dot-blocked"></span> Blocked</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── View · Alert Payload ──────────────── -->
+      <div class="view" id="view-payload">
+        <div class="view-head">
+          <div>
+            <div class="view-eyebrow">Alert payload · transformation pipeline</div>
+            <div class="view-title mono" id="payload-current">no alert selected</div>
+          </div>
+          <div class="view-meta">JSON snapshot</div>
+        </div>
+
+        <div class="payload-stages" id="payload-stages">
+          <!-- 7 stage chips: Incoming → Normalized → Orchestrator → Tools → Rules → Narrative → Disposition -->
+        </div>
+
+        <div class="payload-columns">
+          <div class="payload-col">
+            <div class="payload-col-head">
+              <span>Raw alert</span>
+              <span class="mono tag-mut" id="payload-raw-size">—</span>
+            </div>
+            <pre class="payload-code mono" id="payload-raw">// click an alert in the intake stream</pre>
+          </div>
+          <div class="payload-col">
+            <div class="payload-col-head">
+              <span>Parsed worksheet</span>
+              <span class="mono tag-mut" id="payload-parsed-size">—</span>
+            </div>
+            <pre class="payload-code mono" id="payload-parsed">// runs after orchestrator completes</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── View · Rule Engine ────────────────── -->
+      <div class="view" id="view-scoring">
+        <div class="view-head">
+          <div>
+            <div class="view-eyebrow">Deterministic verdict · agent.py:_phase2_rule_based_scoring</div>
+            <div class="view-title mono" id="scoring-current">no alert selected</div>
+          </div>
+          <div class="view-meta" id="scoring-verdict-meta">awaiting verdict</div>
+        </div>
+
+        <div class="scoring-top">
+          <!-- Gauge -->
+          <div class="gauge-wrap">
+            <svg class="gauge" viewBox="0 0 200 120">
+              <defs>
+                <linearGradient id="gauge-stroke" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#10B981"/>
+                  <stop offset="50%" stop-color="#F59E0B"/>
+                  <stop offset="100%" stop-color="#EF4444"/>
+                </linearGradient>
+              </defs>
+              <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#1F2937" stroke-width="14" stroke-linecap="round"/>
+              <path id="gauge-fill" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gauge-stroke)" stroke-width="14" stroke-linecap="round" stroke-dasharray="251" stroke-dashoffset="251"/>
+              <text id="gauge-value" x="100" y="80" text-anchor="middle" font-size="34" font-weight="700" font-family="JetBrains Mono" fill="#F4F4F5">—</text>
+              <text x="100" y="105" text-anchor="middle" font-size="10" fill="#71717A" letter-spacing="2">FINAL RISK SCORE</text>
+            </svg>
+            <div class="gauge-verdict-pill" id="gauge-verdict" data-verdict="">—</div>
+          </div>
+
+          <!-- Equation -->
+          <div class="score-equation">
+            <div class="eq-row">
+              <div class="eq-label">base</div>
+              <div class="eq-bar-wrap"><div class="eq-bar bar-base" id="bar-base"></div></div>
+              <div class="eq-val mono" id="val-base">0.000</div>
+            </div>
+            <div class="eq-row">
+              <div class="eq-label">+ context</div>
+              <div class="eq-bar-wrap"><div class="eq-bar bar-context" id="bar-context"></div></div>
+              <div class="eq-val mono" id="val-context">+0.000</div>
+            </div>
+            <div class="eq-row">
+              <div class="eq-label">+ confidence</div>
+              <div class="eq-bar-wrap"><div class="eq-bar bar-conf" id="bar-conf"></div></div>
+              <div class="eq-val mono" id="val-conf">+0.000</div>
+            </div>
+            <div class="eq-divider"></div>
+            <div class="eq-row eq-final">
+              <div class="eq-label">= final</div>
+              <div class="eq-bar-wrap"><div class="eq-bar bar-final" id="bar-final"></div></div>
+              <div class="eq-val mono large" id="val-final">0.000</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="explain-grid" id="explain-grid">
+          <!-- per-factor breakdown cards filled by JS -->
+        </div>
+
+        <div class="narrative-box">
+          <div class="narrative-head">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>LLM narrative</span>
+            <span class="tag-mut mono" id="narrative-model">—</span>
+          </div>
+          <div class="narrative-body" id="narrative-body">No narrative yet. Run a batch and select an alert to see the Phase 3 explanation.</div>
+        </div>
+      </div>
+
+      <!-- ── View · Architecture ───────────────── -->
+      <div class="view" id="view-architecture">
+        <div class="view-head">
+          <div>
+            <div class="view-eyebrow">Service topology · live data flow</div>
+            <div class="view-title">System health</div>
+          </div>
+          <div class="view-meta mono" id="arch-throughput">0 events/min</div>
+        </div>
+
+        <svg class="arch-svg" viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="arch-edge" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.2"/>
+              <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.4"/>
+            </linearGradient>
+            <linearGradient id="arch-active" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#60A5FA"/>
+              <stop offset="100%" stop-color="#A78BFA"/>
+            </linearGradient>
+          </defs>
+          <g id="arch-edges"></g>
+          <g id="arch-nodes"></g>
+        </svg>
+
+        <div class="arch-services" id="arch-services"></div>
+      </div>
+
+    </section>
+
+    <!-- ── RIGHT RAIL · Tool inspector ────────────────── -->
+    <aside class="rail rail-right">
+      <div class="rail-head">
+        <div class="rail-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Tool Inspector
+        </div>
+        <div class="rail-sub" id="inspector-sub">select a node</div>
+      </div>
+      <div class="inspector" id="inspector">
+        <div class="inspector-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <div class="inspector-empty-title">Tool Inspector</div>
+          <div class="inspector-empty-sub">Click any tool node in the graph or an alert in the intake stream to see its inputs, outputs, audit hash and regulatory context.</div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- ── Bottom timeline ─────────────────────────────────── -->
+  <footer class="timeline-bar">
+    <div class="timeline-head">
+      <div class="timeline-title">
+        <span class="rec-dot"></span>
+        Live Event Timeline
+      </div>
+      <div class="timeline-controls">
+        <div class="timeline-search">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="timeline-search" placeholder="filter events…" autocomplete="off" />
+        </div>
+        <div class="timeline-filters" id="timeline-filters">
+          <button class="filter-chip active" data-filter="all">all</button>
+          <button class="filter-chip" data-filter="tool">tools</button>
+          <button class="filter-chip" data-filter="phase">phases</button>
+          <button class="filter-chip" data-filter="block">blocks</button>
+          <button class="filter-chip" data-filter="verdict">verdicts</button>
+        </div>
+        <button class="timeline-pause" id="timeline-pause" title="Pause auto-scroll">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="4" x2="6" y2="20"/><line x1="18" y1="4" x2="18" y2="20"/></svg>
+        </button>
+        <button class="timeline-clear" id="timeline-clear" title="Clear">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="timeline-stream" id="timeline-stream"></div>
+  </footer>
+
+  <script src="/static/js/observability.js"></script>
+</body>
+</html>
