@@ -34,6 +34,7 @@ import json
 import os
 import sys
 import textwrap
+import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -222,6 +223,47 @@ Plain English. Specific. Cite actual values from the tool results. Under \
 """
 
 
+SCREENING_PROMPT = """You are a screening subagent. Your only job is to call screening_api_lookup(alert_id) exactly once for the alert ID provided, then reply DONE.
+
+Do not call any other tool. Do not produce a verdict. Do not write narrative. Just call the tool with the given alert_id and reply DONE when the result is returned.
+"""
+
+KYC_PROMPT = """You are a KYC subagent. Call core_banking_get_customer(customer_id=<provided>) exactly once. Reply DONE when the tool returns.
+
+Do not call any other tool. Do not interpret the data — just retrieve it.
+"""
+
+ADVERSE_MEDIA_PROMPT = """You are an adverse media subagent. You own two tools:
+  1. get_adverse_media(customer_id=<provided>, customer_name=<provided>)
+  2. get_company_registry(entity_name=<provided>)
+
+Call BOTH tools, each exactly once, then reply DONE. Order does not matter; both calls are independent. Do not call any other tool. Do not interpret.
+"""
+
+UBO_PROMPT = """You are a UBO (Ultimate Beneficial Owner) subagent. Call get_ubo_chain(customer_id=<provided>, entity_name=<provided>) exactly once. Reply DONE when the tool returns. Do not call any other tool.
+"""
+
+CASE_HISTORY_PROMPT = """You are a case-history subagent. Call case_management_prior_cases(name=<provided>) exactly once using the customer_name. Reply DONE when the tool returns. Do not call any other tool.
+"""
+
+
+SUBAGENT_TOOLS = {
+    "screening":     [s for s in TOOL_SCHEMAS if s["name"] == "screening_api_lookup"],
+    "kyc":           [s for s in TOOL_SCHEMAS if s["name"] == "core_banking_get_customer"],
+    "adverse-media": [s for s in TOOL_SCHEMAS if s["name"] in ("get_adverse_media", "get_company_registry")],
+    "ubo":           [s for s in TOOL_SCHEMAS if s["name"] == "get_ubo_chain"],
+    "case-history":  [s for s in TOOL_SCHEMAS if s["name"] == "case_management_prior_cases"],
+}
+
+SUBAGENT_PROMPTS = {
+    "screening":     SCREENING_PROMPT,
+    "kyc":           KYC_PROMPT,
+    "adverse-media": ADVERSE_MEDIA_PROMPT,
+    "ubo":           UBO_PROMPT,
+    "case-history":  CASE_HISTORY_PROMPT,
+}
+
+
 # ── Orchestrator ──────────────────────────────────────────────────────
 class HybridOrchestrator:
     """
@@ -357,132 +399,75 @@ class HybridOrchestrator:
         "case_management_prior_cases", "get_company_registry",
     }
 
-    def _phase1_llm_tool_calls(
+    def _run_subagent(
         self,
+        *,
+        agent_name: str,
         alert_id: str,
+        user_task: str,
         hook: HookManager,
-        emit: Callable[[dict], None] = lambda _e: None,
+        emit: Callable[[dict], None],
     ) -> dict:
-        print("\n" + "─" * 60)
-        print(f" PHASE 1: LLM investigation ({self.model})")
-        print("─" * 60)
+        """Run one subagent: tight LLM loop, returns {tool_name: tool_output}."""
+        self._emit("subagent_start", alert_id=alert_id, agent=agent_name)
+        emit({"type": "subagent_start", "agent": agent_name})
 
-        # Anthropic shape: system is top-level, NOT a message role.
-        messages: list[dict] = [
-            {"role": "user", "content": (
-                f"Investigate sanctions alert {alert_id}. "
-                f"Start by calling screening_api_lookup(alert_id='{alert_id}'), "
-                f"then read the returned `customer_id` / `customer_name` / "
-                f"`entity_name` and pass THOSE to the other tools."
-            )},
-        ]
-
-        tool_results: dict[str, Any] = {}
-        seen_calls: set[tuple] = set()  # (name, args-tuple) — dedup
-        max_iter = 10
+        messages = [{"role": "user", "content": user_task}]
+        tools = SUBAGENT_TOOLS[agent_name]
+        system_prompt = SUBAGENT_PROMPTS[agent_name]
+        sub_results: dict[str, Any] = {}
+        max_iter = 4
 
         for iteration in range(1, max_iter + 1):
-            print(f"\n  [LLM] step {iteration}")
-            emit({"type": "llm_step", "step": iteration})
             try:
                 resp = self.client.messages.create(
                     model=self.model,
-                    max_tokens=512,
+                    max_tokens=384,
                     temperature=0.0,
-                    system=[{"type": "text", "text": PHASE1_PROMPT, "cache_control": {"type": "ephemeral"}}],
-                    tools=TOOL_SCHEMAS,
+                    system=[{"type": "text", "text": system_prompt}],
+                    tools=tools,
                     messages=messages,
                 )
             except Exception as e:
-                print(f"  [LLM] API error: {e!r}")
+                print(f"  [{agent_name}] API error: {e!r}")
                 break
 
-            cache_read = getattr(resp.usage, "cache_read_input_tokens", 0) or 0
-            cache_write = getattr(resp.usage, "cache_creation_input_tokens", 0) or 0
-            print(f"  [cache] read={cache_read} write={cache_write} input={resp.usage.input_tokens}")
-            self._emit(
-                "cache_stats",
-                alert_id=alert_id,
-                step=iteration,
-                cache_read=cache_read,
-                cache_creation=cache_write,
-                input_tokens=resp.usage.input_tokens,
-            )
-
-            # Stop condition: anything other than tool_use means we're done.
             if resp.stop_reason != "tool_use":
-                preview = ""
-                for block in resp.content:
-                    if getattr(block, "type", None) == "text":
-                        preview = (block.text or "").strip()[:80]
-                        break
-                print(f"  [LLM] data gathering complete: {preview}")
                 break
 
-            # Append the assistant turn verbatim — the SDK accepts its own
-            # content blocks back as input on the next turn.
             messages.append({"role": "assistant", "content": resp.content})
-
-            # Build ONE user-role turn whose content is a list of tool_result
-            # blocks. Anthropic requires every tool_use to be answered with a
-            # matching tool_result in the very next user turn.
-            tool_result_blocks: list[dict] = []
+            tool_result_blocks = []
 
             for block in resp.content:
-                if getattr(block, "type", None) != "tool_use":
+                if block.type != "tool_use":
                     continue
                 name = block.name
                 args = block.input or {}
-                print(f"  [LLM → {name}]  args={args}")
-
-                # Duplicate-call guard — short-circuit with a hint
-                key = (name, tuple(sorted(args.items())))
-                if key in seen_calls:
-                    note = {"note": f"already called {name} with same args — skipping"}
-                    tool_result_blocks.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(note),
-                    })
-                    continue
-                seen_calls.add(key)
 
                 fn = TOOLS_MAP.get(name)
-                self._emit(
-                    "tool_call_start",
-                    alert_id=alert_id, tool=name, source="llm",
-                )
+                self._emit("tool_call_start", alert_id=alert_id, tool=name, source="llm", agent=agent_name)
                 tool_ok = True
                 tool_blocked = False
                 if fn is None:
-                    tool_out: Any = {"error": f"unknown tool: {name}"}
+                    tool_out = {"error": f"unknown tool: {name}"}
                     tool_ok = False
                 else:
                     try:
                         tool_out = hook.invoke(name, fn, **args)
                         if name != "close_alert":
-                            tool_results[name] = tool_out
+                            sub_results[name] = tool_out
                     except ToolBlockedError as e:
                         tool_out = {"blocked": True, "reason": str(e)}
                         tool_ok = False
                         tool_blocked = True
-                        print("    ⛔ BLOCKED")
                     except TypeError as e:
                         tool_out = {"error": f"bad args: {e}"}
                         tool_ok = False
-                        print(f"    ⚠ bad args: {e}")
                     except Exception as e:
                         tool_out = {"error": str(e)}
                         tool_ok = False
-                        print(f"    ⚠ {e}")
-                self._emit(
-                    "tool_call_complete",
-                    alert_id=alert_id, tool=name, source="llm",
-                    ok=tool_ok, blocked=tool_blocked,
-                )
+                self._emit("tool_call_complete", alert_id=alert_id, tool=name, source="llm", ok=tool_ok, blocked=tool_blocked, agent=agent_name)
 
-                # Compact tool output for the LLM context — keep each result
-                # under 600 chars. Full result is in tool_results for Phase 2.
                 summary = self._summarise_tool_output(name, tool_out)
                 tool_result_blocks.append({
                     "type": "tool_result",
@@ -490,14 +475,84 @@ class HybridOrchestrator:
                     "content": json.dumps(summary, default=str)[:600],
                 })
 
-            # Append the consolidated user-role tool_result message.
             if tool_result_blocks:
                 messages.append({"role": "user", "content": tool_result_blocks})
 
-            # Early exit: every evidence tool already returned a real result
-            if self.EVIDENCE_TOOLS.issubset(tool_results.keys()):
-                print(f"\n  [LLM] all 6 evidence tools collected — stopping loop")
-                break
+        self._emit("subagent_complete", alert_id=alert_id, agent=agent_name, tool_count=len(sub_results))
+        emit({"type": "subagent_complete", "agent": agent_name})
+        return sub_results
+
+    def _phase1_llm_tool_calls(
+        self,
+        alert_id: str,
+        hook: HookManager,
+        emit: Callable[[dict], None] = lambda _e: None,
+    ) -> dict:
+        from concurrent.futures import ThreadPoolExecutor
+
+        print("\n" + "─" * 60)
+        print(f" PHASE 1: Supervisor + 5 subagents ({self.model})")
+        print("─" * 60)
+
+        tool_results: dict[str, Any] = {}
+
+        # Step 1: screening (sync — others depend on its output)
+        screening_task = (
+            f"Investigate sanctions alert {alert_id}. "
+            f"Call screening_api_lookup(alert_id='{alert_id}')."
+        )
+        screening_results = self._run_subagent(
+            agent_name="screening",
+            alert_id=alert_id,
+            user_task=screening_task,
+            hook=hook,
+            emit=emit,
+        )
+        tool_results.update(screening_results)
+
+        sr = screening_results.get("screening_api_lookup", {}) or {}
+        alert = sr.get("alert", {}) or {}
+        customer_id = alert.get("customer_id", "")
+        customer_name = alert.get("customer_name", "")
+        entity_name = sr.get("entity_name", "")
+
+        if not customer_id:
+            print(f"  [supervisor] screening returned no customer_id, skipping fan-out")
+            return tool_results
+
+        # Step 2: fan out 4 subagents in parallel
+        subagent_tasks = {
+            "kyc": f"Call core_banking_get_customer(customer_id='{customer_id}').",
+            "adverse-media": (
+                f"Call get_adverse_media(customer_id='{customer_id}', customer_name='{customer_name}') "
+                f"AND get_company_registry(entity_name='{entity_name}'). Both required."
+            ),
+            "ubo": f"Call get_ubo_chain(customer_id='{customer_id}', entity_name='{entity_name}').",
+            "case-history": f"Call case_management_prior_cases(name='{customer_name}').",
+        }
+
+        FAN_OUT_STAGGER_SEC = float(os.environ.get("ANTHROPIC_FAN_OUT_STAGGER_SEC", "0.5"))
+
+        with ThreadPoolExecutor(max_workers=4, thread_name_prefix="subagent") as pool:
+            futures = {}
+            for name, task in subagent_tasks.items():
+                futures[pool.submit(
+                    self._run_subagent,
+                    agent_name=name,
+                    alert_id=alert_id,
+                    user_task=task,
+                    hook=hook,
+                    emit=emit,
+                )] = name
+                time.sleep(FAN_OUT_STAGGER_SEC)  # rate-limit smoothing
+
+            for fut in futures:
+                name = futures[fut]
+                try:
+                    sub_results = fut.result(timeout=60)
+                    tool_results.update(sub_results)
+                except Exception as e:
+                    print(f"  [supervisor] {name} subagent crashed: {e!r}")
 
         return tool_results
 

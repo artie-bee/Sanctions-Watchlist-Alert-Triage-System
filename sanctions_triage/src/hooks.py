@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,6 +53,7 @@ class HookManager:
         self.events: list[dict] = []
         self._on_event = on_event
         self._tool_start_ms: dict[str, float] = {}
+        self._lock = threading.Lock()
 
     def _emit(self, payload: dict) -> None:
         if self._on_event is None:
@@ -123,24 +125,25 @@ class HookManager:
 
     # ── Append-hash-write ──────────────────────────────────
     def _append(self, body: dict) -> dict:
-        entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "alert_id": self.alert_id,
-            **body,
-        }
-        entry["sha256"] = _sha256({
-            "alert_id": self.alert_id,
-            "event": entry.get("event"),
-            "tool": entry.get("tool"),
-            "tool_input": entry.get("tool_input"),
-            "tool_output_summary": entry.get("tool_output_summary"),
-            "reason": entry.get("reason"),
-            "ts": entry["ts"],
-        })
-        self.events.append(entry)
-        with AUDIT_LOG_PATH.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, default=str) + "\n")
-        return entry
+        with self._lock:
+            entry = {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "alert_id": self.alert_id,
+                **body,
+            }
+            entry["sha256"] = _sha256({
+                "alert_id": self.alert_id,
+                "event": entry.get("event"),
+                "tool": entry.get("tool"),
+                "tool_input": entry.get("tool_input"),
+                "tool_output_summary": entry.get("tool_output_summary"),
+                "reason": entry.get("reason"),
+                "ts": entry["ts"],
+            })
+            self.events.append(entry)
+            with AUDIT_LOG_PATH.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+            return entry
 
     @staticmethod
     def _summarize_output(out: Any) -> Any:

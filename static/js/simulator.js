@@ -15,13 +15,13 @@
 
   // ── Tool → agent routing ────────────────────────────────────
   const TOOL_AGENT = {
-    screening_api_lookup:        "retrieval",
-    core_banking_get_customer:   "retrieval",
-    case_management_prior_cases: "retrieval",
-    get_adverse_media:           "enrichment",
-    get_company_registry:        "enrichment",
-    get_ubo_chain:               "enrichment",
-    close_alert:                 "str",
+    screening_api_lookup:        "screening",
+    core_banking_get_customer:   "kyc",
+    get_adverse_media:           "adverse-media",
+    get_company_registry:        "adverse-media",
+    get_ubo_chain:               "ubo",
+    case_management_prior_cases: "case-history",
+    close_alert:                 "supervisor",
   };
   const RETRIEVAL_TOOLS = new Set([
     "screening_api_lookup", "core_banking_get_customer", "case_management_prior_cases",
@@ -31,9 +31,30 @@
   ]);
 
   const AGENT_BADGE = {
-    retrieval:  "RET",
-    enrichment: "ENR",
-    str:        "BLK",
+    retrieval:        "RET",
+    enrichment:       "ENR",
+    scoring:          "SCO",
+    str:              "BLK",
+    screening:        "SCR",
+    kyc:              "KYC",
+    "adverse-media":  "AMD",
+    ubo:              "UBO",
+    "case-history":   "CHX",
+    supervisor:       "SUP",
+  };
+
+  // LANE_BUCKET partitions the 5 subagent IDs back to the 2 visual lanes
+  // (retrieval / enrichment) used by the simulator UI shell. The
+  // partitioning is duplicated in RETRIEVAL_TOOLS and ENRICHMENT_TOOLS
+  // below — if any tool moves between subagents in TOOL_AGENT, update
+  // BOTH this map and the tool-set constants to keep them consistent.
+  const LANE_BUCKET = {
+    screening:       "retrieval",
+    kyc:             "retrieval",
+    "case-history":  "retrieval",
+    "adverse-media": "enrichment",
+    ubo:             "enrichment",
+    supervisor:      "supervisor",
   };
 
   // ── State ───────────────────────────────────────────────────
@@ -603,9 +624,10 @@
 
       case "tool_call_start": {
         const agent = TOOL_AGENT[ev.tool];
-        if (agent === "retrieval" || agent === "enrichment") {
-          setAgent(agent, "active");
-          if (agent === "enrichment") {
+        const lane = LANE_BUCKET[agent] || agent;
+        if (lane === "retrieval" || lane === "enrichment") {
+          setAgent(lane, "active");
+          if (lane === "enrichment") {
             els.guardrailsBanner.classList.add("visible");
           }
         }
@@ -622,12 +644,13 @@
 
       case "tool_call_complete": {
         const agent = TOOL_AGENT[ev.tool];
+        const lane = LANE_BUCKET[agent] || agent;
         const blocked = !!ev.blocked;
         const toolState = blocked ? "blocked" : (ev.ok === false ? "blocked" : "done");
         setTool(ev.tool, toolState);
 
         // Track agent-level completion
-        if (agent === "retrieval") {
+        if (lane === "retrieval") {
           state.retrievalToolsDone.add(ev.tool);
           if (state.retrievalToolsDone.size >= RETRIEVAL_TOOLS.size) {
             setAgent("retrieval", "done");
@@ -638,7 +661,7 @@
               "Retrieval complete · re-evaluating evidence…";
           }
         }
-        if (agent === "enrichment") {
+        if (lane === "enrichment") {
           state.enrichmentToolsDone.add(ev.tool);
           if (state.enrichmentToolsDone.size >= ENRICHMENT_TOOLS.size) {
             setAgent("enrichment", "done");
