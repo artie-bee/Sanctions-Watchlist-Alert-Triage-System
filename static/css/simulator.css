@@ -742,6 +742,19 @@ body::before {
   white-space: pre-wrap;
 }
 .narrative-body:empty { display: none; }
+
+#narrative-body.streaming::after {
+  content: "▌";
+  display: inline-block;
+  animation: cursor-blink 1s steps(2, start) infinite;
+  margin-left: 2px;
+  opacity: 0.85;
+}
+
+@keyframes cursor-blink {
+  to { visibility: hidden; }
+}
+
 .audit-note {
   margin-top: 14px;
   font-size: 10.5px;

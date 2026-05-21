@@ -577,11 +577,29 @@
         pushReasoning("SUP", "info", "Phase 3 · LLM narrative");
         break;
 
-      case "phase_3_complete":
-        els.narrativeBody.textContent = ev.narrative || "";
-        pushReasoning("SUP", "ok",
-          `Narrative ready · ${(ev.narrative || "").length} chars`);
+      case "phase_3_streaming_start":
+        els.narrativeBody.textContent = "";
+        els.narrativeBody.classList.add("streaming");
+        pushReasoning("SUP", "info", "Phase 3 · narrative streaming");
         break;
+
+      case "narrative_token":
+        if (typeof ev.token === "string") {
+          els.narrativeBody.textContent += ev.token;
+        }
+        break;
+
+      case "phase_3_complete": {
+        els.narrativeBody.classList.remove("streaming");
+        const streamed = els.narrativeBody.textContent || "";
+        const canonical = ev.narrative || "";
+        if (streamed.trim() !== canonical.trim()) {
+          els.narrativeBody.textContent = canonical;
+        }
+        pushReasoning("SUP", "ok",
+          `Narrative ready · ${canonical.length} chars`);
+        break;
+      }
 
       case "tool_call_start": {
         const agent = TOOL_AGENT[ev.tool];

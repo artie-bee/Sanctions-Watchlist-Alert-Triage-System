@@ -755,19 +755,35 @@ class HybridOrchestrator:
               registry_hits  : {score_pack['registry_n']}
         """).strip()
 
+        # Signal the frontend to clear the narrative panel and prepare for streaming tokens
+        self._emit("phase_3_streaming_start", alert_id=alert_id)
+        text_chunks: list[str] = []
         try:
-            resp = self.client.messages.create(
+            with self.client.messages.stream(
                 model=self.model,
                 max_tokens=420,
                 temperature=0.3,
                 system=PHASE3_PROMPT,
                 messages=[{"role": "user", "content": context}],
-            )
-            text = (resp.content[0].text or "").strip()
+            ) as stream:
+                for token in stream.text_stream:
+                    text_chunks.append(token)
+                    self._emit(
+                        "narrative_token",
+                        alert_id=alert_id,
+                        token=token,
+                    )
+            text = "".join(text_chunks).strip()
         except Exception as e:
-            text = (f"Narrative generation failed: {e}. "
-                    f"Verdict: {score_pack['recommendation']} "
-                    f"at {score_pack['confidence_pct']}% confidence.")
+            # Streaming connections can drop mid-flight. Return whatever we got
+            # plus an error tail, OR fall back to a one-liner if we got nothing.
+            partial = "".join(text_chunks).strip()
+            if partial:
+                text = partial + f"\n\n[Streaming interrupted: {e}]"
+            else:
+                text = (f"Narrative generation failed: {e}. "
+                        f"Verdict: {score_pack['recommendation']} "
+                        f"at {score_pack['confidence_pct']}% confidence.")
         print(f"  Narrative generated ({len(text)} chars)")
         return text
 
