@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "sanctions-dynamodb": {
+      "command": "python",
+      "args": ["C:\\Users\\artlptp255user\\Downloads\\Sanction Search Claude\\sanctions_triage\\src\\mcp_servers\\dynamodb_server.py"]
+    },
+    "sanctions-db": {
+      "command": "python",
+      "args": ["C:\\Users\\artlptp255user\\Downloads\\Sanction Search Claude\\sanctions_triage\\src\\mcp_servers\\sanctions_db_server.py"]
+    },
+    "sanctions-case-management": {
+      "command": "python",
+      "args": ["C:\\Users\\artlptp255user\\Downloads\\Sanction Search Claude\\sanctions_triage\\src\\mcp_servers\\case_management_server.py"]
+    },
+    "sanctions-audit-log": {
+      "command": "python",
+      "args": ["C:\\Users\\artlptp255user\\Downloads\\Sanction Search Claude\\sanctions_triage\\src\\mcp_servers\\audit_log_server.py"]
+    }
+  }
+}

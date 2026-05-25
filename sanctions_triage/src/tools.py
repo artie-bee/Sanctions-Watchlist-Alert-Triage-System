@@ -37,6 +37,29 @@ def _f(x, default=0.0):
         return default
 
 
+def sanctions_db_search(query: str, limit: int = 10) -> list[dict]:
+    """
+    Search the sanctions.db SQLite table by full_name LIKE %query%.
+    Returns list of hit dicts: id, full_name, nationality, program, source, listed_on, raw_data.
+    Used by screening_api_lookup AND the mcp-sanctions-db server.
+    """
+    conn = get_sanctions_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, full_name, nationality, program, source, listed_on, raw_data
+            FROM sanctions
+            WHERE full_name LIKE ?
+            LIMIT ?
+            """,
+            (f"%{query}%", limit),
+        )
+        return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 # ── Tool 1 ── screening API + real sanctions.db hit ────────────────
 def screening_api_lookup(alert_id: str) -> dict:
     """
@@ -55,21 +78,7 @@ def screening_api_lookup(alert_id: str) -> dict:
         or ""
     )
 
-    conn = get_sanctions_db()
-    cur = conn.cursor()
-    # Real schema columns: full_name, program, source, listed_on, raw_data
-    # (no `aliases` column — raw_data sometimes has aliases as JSON.)
-    cur.execute(
-        """
-        SELECT id, full_name, nationality, program, source, listed_on, raw_data
-        FROM sanctions
-        WHERE full_name LIKE ?
-        LIMIT 10
-        """,
-        (f"%{entity_name}%",),
-    )
-    db_hits = [dict(r) for r in cur.fetchall()]
-    conn.close()
+    db_hits = sanctions_db_search(entity_name, limit=10)
 
     print(f"\n  [Tool: screening_api_lookup]")
     print(f"    Alert ID    : {alert_id}")
@@ -312,7 +321,7 @@ def close_alert(alert_id: str, disposition: str) -> dict:
     If this body runs, the hook failed.
     """
     raise RuntimeError(
-        "BLOCKED: Analyst disposition required. "
+        "BLOCKED: Analyst disposition required   . "
         "Agent cannot auto-close sanctions alerts. "
         "PMLA 2002 / RBI KYC Master Direction 2025."
     )
