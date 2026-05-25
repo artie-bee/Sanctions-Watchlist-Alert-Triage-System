@@ -55,4 +55,5 @@ class Worksheet(BaseModel):
     recommendation: str = "UNCERTAIN"  # FALSE_POSITIVE | TRUE_MATCH | UNCERTAIN
 
     narrative: str = ""
+    narrative_citations: list[dict] = Field(default_factory=list)
     blocked_actions: list[str] = Field(default_factory=list)

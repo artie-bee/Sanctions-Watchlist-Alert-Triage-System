@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import textwrap
 from pathlib import Path
@@ -219,6 +220,17 @@ Write a clear compliance narrative explaining:
 
 Plain English. Specific. Cite actual values from the tool results. Under \
 200 words. Do NOT repeat the verdict — explain it.
+
+When the citable sanctions hits or prior cases sections are present in \
+the input, cite your claims about them using the marker syntax \
+[cite:<id>], where <id> is the row's identifier (s1, s2, c1, etc.). \
+Examples:
+  - "The match is against entity [cite:s1] from OFAC SDN list."
+  - "Two prior cases [cite:c1][cite:c2] cleared this name with DOB mismatch."
+Only emit markers for rows present in the citable sections. Do NOT \
+invent or guess IDs. Do NOT add markers to claims about KYC, \
+transactions, or counts — only to claims that anchor to a specific \
+listed row.
 """
 
 
@@ -310,12 +322,17 @@ class HybridOrchestrator:
         # ── PHASE 3 — LLM narrative ──
         emit({"type": "phase_start", "phase": 3, "label": "LLM narrative"})
         self._emit("phase_3_start", alert_id=alert_id)
-        llm_narrative = self._phase3_llm_narrative(
+        llm_narrative, narrative_citations = self._phase3_llm_narrative(
             alert_id, tool_results, score_pack
         )
         emit({"type": "narrative", "text": llm_narrative})
         emit({"type": "phase_end", "phase": 3})
-        self._emit("phase_3_complete", alert_id=alert_id, narrative=llm_narrative)
+        self._emit(
+            "phase_3_complete",
+            alert_id=alert_id,
+            narrative=llm_narrative,
+            narrative_citations=narrative_citations,
+        )
 
         # ── Demonstrate the close_alert block (3 attempts × 1 alert) ──
         blocked = []
@@ -337,7 +354,9 @@ class HybridOrchestrator:
 
         ws = self._build_worksheet(
             alert_id, tool_results, score_pack,
-            llm_narrative=llm_narrative, blocked=blocked,
+            llm_narrative=llm_narrative,
+            narrative_citations=narrative_citations,
+            blocked=blocked,
         )
         emit({"type": "worksheet", "worksheet": json.loads(ws.model_dump_json())})
         emit({"type": "done"})
@@ -705,7 +724,7 @@ class HybridOrchestrator:
     # ────────────────────────────────────────────────────────────────
     def _phase3_llm_narrative(
         self, alert_id: str, tr: dict, score_pack: dict,
-    ) -> str:
+    ) -> tuple[str, list[dict]]:
         print("\n" + "─" * 60)
         print(" PHASE 3: LLM narrative")
         print("─" * 60)
@@ -717,6 +736,58 @@ class HybridOrchestrator:
 
         alert    = sr.get("alert", {}) or {}
         kyc      = cr.get("kyc",   {}) or {}
+
+        # Build citation map: marker_id -> source row
+        citation_map: dict[str, dict] = {}
+
+        # Sanctions DB hits: cite as s1, s2, ...
+        for i, hit in enumerate(sr.get("sanctions_db_hits", []) or [], start=1):
+            marker = f"s{i}"
+            citation_map[marker] = {
+                "marker": marker,
+                "tool": "screening_api_lookup",
+                "path": f"sanctions_db_hits[{i-1}]",
+                "label": f"SDN id={hit.get('id', '?')} · {(hit.get('full_name') or '')[:60]} · {hit.get('source', '?')}",
+                "raw": {k: hit.get(k) for k in ("id", "full_name", "program", "source", "listed_on", "nationality")},
+            }
+
+        # Prior cases: cite as c1, c2, ...
+        for i, case in enumerate(pr.get("case_list", []) or [], start=1):
+            marker = f"c{i}"
+            citation_map[marker] = {
+                "marker": marker,
+                "tool": "case_management_prior_cases",
+                "path": f"case_list[{i-1}]",
+                "label": f"{case.get('case_id', '?')} · {case.get('resolution', '?')} · {case.get('resolved_at', '?')}",
+                "raw": {k: case.get(k) for k in ("case_id", "name_queried", "alert_id", "resolution", "resolved_by", "resolved_at", "resolution_note")},
+            }
+
+        # Citable-rows section: only emitted if at least one row exists, so
+        # alerts with no hits don't waste tokens on empty headers.
+        citable_lines: list[str] = []
+        s_markers = [m for m in citation_map if m.startswith("s")]
+        c_markers = [m for m in citation_map if m.startswith("c")]
+        if s_markers:
+            citable_lines.append("\nCitable sanctions hits:")
+            for m in sorted(s_markers, key=lambda x: int(x[1:])):
+                h = citation_map[m]["raw"]
+                citable_lines.append(
+                    f"  {m}  → id={h.get('id')}, "
+                    f"name='{(h.get('full_name') or '')[:60]}', "
+                    f"program='{h.get('program') or ''}', "
+                    f"source='{h.get('source') or ''}', "
+                    f"listed_on='{h.get('listed_on') or ''}'"
+                )
+        if c_markers:
+            citable_lines.append("\nCitable prior cases:")
+            for m in sorted(c_markers, key=lambda x: int(x[1:])):
+                r = citation_map[m]["raw"]
+                citable_lines.append(
+                    f"  {m}  → case_id='{r.get('case_id')}', "
+                    f"resolution='{r.get('resolution')}', "
+                    f"resolved_at='{r.get('resolved_at')}'"
+                )
+        citable_block = "\n".join(citable_lines)
 
         context = textwrap.dedent(f"""
             Alert ID            : {alert_id}
@@ -755,13 +826,16 @@ class HybridOrchestrator:
               registry_hits  : {score_pack['registry_n']}
         """).strip()
 
+        if citable_block:
+            context = context + "\n" + citable_block
+
         # Signal the frontend to clear the narrative panel and prepare for streaming tokens
         self._emit("phase_3_streaming_start", alert_id=alert_id)
         text_chunks: list[str] = []
         try:
             with self.client.messages.stream(
                 model=self.model,
-                max_tokens=420,
+                max_tokens=600,   # was 420; widened to cover citation context + markers
                 temperature=0.3,
                 system=PHASE3_PROMPT,
                 messages=[{"role": "user", "content": context}],
@@ -784,8 +858,12 @@ class HybridOrchestrator:
                 text = (f"Narrative generation failed: {e}. "
                         f"Verdict: {score_pack['recommendation']} "
                         f"at {score_pack['confidence_pct']}% confidence.")
-        print(f"  Narrative generated ({len(text)} chars)")
-        return text
+
+        used_markers = set(re.findall(r"\[cite:([a-z]\d+)\]", text))
+        used_citations = [citation_map[m] for m in sorted(used_markers) if m in citation_map]
+
+        print(f"  Narrative generated ({len(text)} chars)  citations={len(used_citations)}")
+        return text, used_citations
 
     # ────────────────────────────────────────────────────────────────
     # Worksheet assembly (existing Worksheet shape — run_demo.py reads it)
@@ -793,6 +871,7 @@ class HybridOrchestrator:
     def _build_worksheet(
         self, alert_id: str, tr: dict, score_pack: dict,
         llm_narrative: str, blocked: list[str],
+        narrative_citations: list[dict] | None = None,
     ) -> Worksheet:
         sr  = tr.get("screening_api_lookup", {}) or {}
         cr  = tr.get("core_banking_get_customer", {}) or {}
@@ -875,8 +954,9 @@ class HybridOrchestrator:
             final_risk_score      = score_pack["final_risk_score"],
             recommendation        = score_pack["recommendation"],
 
-            narrative      = combined_narrative,
-            blocked_actions= blocked,
+            narrative           = combined_narrative,
+            narrative_citations = narrative_citations or [],
+            blocked_actions     = blocked,
         )
 
 
