@@ -593,11 +593,38 @@
         els.narrativeBody.classList.remove("streaming");
         const streamed = els.narrativeBody.textContent || "";
         const canonical = ev.narrative || "";
-        if (streamed.trim() !== canonical.trim()) {
-          els.narrativeBody.textContent = canonical;
+        const citations = ev.narrative_citations || [];
+
+        const citeMap = {};
+        for (const c of citations) {
+          citeMap[c.marker] = c;
         }
+
+        // Prefer canonical (server-authoritative); fall back to streamed if shorter
+        const sourceText = canonical.length >= streamed.length ? canonical : streamed;
+
+        const escapeHtml = (s) => s
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+
+        const parts = sourceText.split(/(\[cite:[a-z]\d+\])/);
+        const html = parts.map(part => {
+          const m = part.match(/^\[cite:([a-z]\d+)\]$/);
+          if (m) {
+            const c = citeMap[m[1]];
+            if (!c) return escapeHtml(part);
+            const label = escapeHtml(c.label || "");
+            return `<sup class="cite" data-marker="${escapeHtml(m[1])}" title="${label}">[${escapeHtml(m[1])}]</sup>`;
+          }
+          return escapeHtml(part);
+        }).join("");
+
+        els.narrativeBody.innerHTML = html;
         pushReasoning("SUP", "ok",
-          `Narrative ready · ${canonical.length} chars`);
+          `Narrative ready · ${canonical.length} chars · ${citations.length} citation${citations.length === 1 ? "" : "s"}`);
         break;
       }
 

@@ -892,6 +892,18 @@ body::before {
   white-space: pre-wrap;
 }
 .narrative-body.empty { color: var(--text-mute); font-style: italic; }
+.cite {
+  background: rgba(74, 158, 255, 0.15);
+  color: var(--blue-bright, #4a9eff);
+  padding: 0 4px;
+  border-radius: 3px;
+  cursor: help;
+  font-size: 0.85em;
+  text-decoration: none;
+}
+.cite:hover {
+  background: rgba(74, 158, 255, 0.30);
+}
 
 /* ═══════════════════════════════════════════════════════════════
    ARCHITECTURE VIEW

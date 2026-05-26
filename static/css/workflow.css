@@ -534,6 +534,18 @@ body { min-height: 100vh; }
   border-radius: var(--radius-sm);
   padding: 14px 16px;
 }
+.cite {
+  background: rgba(74, 158, 255, 0.15);
+  color: var(--blue-bright, #4a9eff);
+  padding: 0 4px;
+  border-radius: 3px;
+  cursor: help;
+  font-size: 0.85em;
+  text-decoration: none;
+}
+.cite:hover {
+  background: rgba(74, 158, 255, 0.30);
+}
 .ws-blocked {
   list-style: none;
   display: flex;
