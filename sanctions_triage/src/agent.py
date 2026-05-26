@@ -53,6 +53,8 @@ from worksheet import (  # noqa: E402
     TransactionSummary,
     Worksheet,
 )
+from db import get_table  # noqa: E402
+from memory import append_cleared_entry, lookup_cleared_entries  # noqa: E402
 
 # ── LLM client (Anthropic Claude, native SDK) ────────────────────────
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -221,12 +223,13 @@ Write a clear compliance narrative explaining:
 Plain English. Specific. Cite actual values from the tool results. Under \
 200 words. Do NOT repeat the verdict — explain it.
 
-When the citable sanctions hits or prior cases sections are present in \
-the input, cite your claims about them using the marker syntax \
-[cite:<id>], where <id> is the row's identifier (s1, s2, c1, etc.). \
-Examples:
+When the citable sanctions hits, prior cases, or prior-cleared-history \
+sections are present in the input, cite your claims about them using \
+the marker syntax [cite:<id>], where <id> is the row's identifier \
+(s1, s2, c1, c2, m1, m2, etc.). Examples:
   - "The match is against entity [cite:s1] from OFAC SDN list."
   - "Two prior cases [cite:c1][cite:c2] cleared this name with DOB mismatch."
+  - "Two prior alerts for this customer name were cleared as false positive [cite:m1][cite:m2]."
 Only emit markers for rows present in the citable sections. Do NOT \
 invent or guess IDs. Do NOT add markers to claims about KYC, \
 transactions, or counts — only to claims that anchor to a specific \
@@ -268,6 +271,12 @@ class HybridOrchestrator:
         on_event: Optional[Callable[[dict], None]] = None,
     ) -> Worksheet:
         hook = HookManager(alert_id=alert_id, on_event=on_event)
+
+        # Step 7b: pre-load alert row so memory lookup later has customer_name + dob.
+        # screening_api_lookup re-fetches the same row inside Phase 1; cheap.
+        alert_row = get_table("sanctions_alerts").get_item(
+            Key={"alert_id": alert_id}
+        ).get("Item", {}) or {}
 
         def emit(payload: dict) -> None:
             if on_event is None:
@@ -323,7 +332,7 @@ class HybridOrchestrator:
         emit({"type": "phase_start", "phase": 3, "label": "LLM narrative"})
         self._emit("phase_3_start", alert_id=alert_id)
         llm_narrative, narrative_citations = self._phase3_llm_narrative(
-            alert_id, tool_results, score_pack
+            alert_id, tool_results, score_pack, alert_row=alert_row,
         )
         emit({"type": "narrative", "text": llm_narrative})
         emit({"type": "phase_end", "phase": 3})
@@ -365,6 +374,21 @@ class HybridOrchestrator:
             alert_id=alert_id,
             worksheet=json.loads(ws.model_dump_json()),
         )
+
+        # Step 7b: auto-record FALSE_POSITIVE verdicts into the memory store.
+        # source="auto" + requires_review=True so a future analyst-review
+        # surface can distinguish these from human-confirmed entries.
+        if ws.recommendation == "FALSE_POSITIVE":
+            append_cleared_entry(
+                customer_name=alert_row.get("customer_name", ""),
+                customer_id=alert_row.get("customer_id", ""),
+                dob=alert_row.get("dob"),
+                nationality=alert_row.get("nationality"),
+                alert_id=alert_id,
+                final_risk_score=float(ws.final_risk_score),
+                source="auto",
+            )
+
         return ws
 
     # ────────────────────────────────────────────────────────────────
@@ -724,6 +748,7 @@ class HybridOrchestrator:
     # ────────────────────────────────────────────────────────────────
     def _phase3_llm_narrative(
         self, alert_id: str, tr: dict, score_pack: dict,
+        alert_row: dict | None = None,
     ) -> tuple[str, list[dict]]:
         print("\n" + "─" * 60)
         print(" PHASE 3: LLM narrative")
@@ -762,11 +787,37 @@ class HybridOrchestrator:
                 "raw": {k: case.get(k) for k in ("case_id", "name_queried", "alert_id", "resolution", "resolved_by", "resolved_at", "resolution_note")},
             }
 
+        # Step 7b: cleared-entity memory lookup → cite as m1, m2, ...
+        # Read-only into Phase 3 — never reaches Phase 2 scoring.
+        ar = alert_row or {}
+        cleared_entries = lookup_cleared_entries(
+            customer_name=ar.get("customer_name", ""),
+            dob=ar.get("dob"),
+            limit=5,
+        )
+        for i, entry in enumerate(cleared_entries, start=1):
+            marker = f"m{i}"
+            citation_map[marker] = {
+                "marker": marker,
+                "tool": "memory_lookup",
+                "path": f"cleared_entities[{i-1}]",
+                "label": (
+                    f"prior FP · alert={entry.get('alert_id', '?')} "
+                    f"· resolved={(entry.get('resolved_at') or '')[:10]} "
+                    f"· src={entry.get('source', '?')}"
+                ),
+                "raw": {k: entry.get(k) for k in (
+                    "alert_id", "resolved_at", "final_risk_score",
+                    "source", "requires_review",
+                )},
+            }
+
         # Citable-rows section: only emitted if at least one row exists, so
         # alerts with no hits don't waste tokens on empty headers.
         citable_lines: list[str] = []
         s_markers = [m for m in citation_map if m.startswith("s")]
         c_markers = [m for m in citation_map if m.startswith("c")]
+        m_markers = [m for m in citation_map if m.startswith("m")]
         if s_markers:
             citable_lines.append("\nCitable sanctions hits:")
             for m in sorted(s_markers, key=lambda x: int(x[1:])):
@@ -786,6 +837,16 @@ class HybridOrchestrator:
                     f"  {m}  → case_id='{r.get('case_id')}', "
                     f"resolution='{r.get('resolution')}', "
                     f"resolved_at='{r.get('resolved_at')}'"
+                )
+        if m_markers:
+            citable_lines.append("\nPrior cleared history (this customer name):")
+            for m in sorted(m_markers, key=lambda x: int(x[1:])):
+                r = citation_map[m]["raw"]
+                citable_lines.append(
+                    f"  {m}  → alert={r.get('alert_id')}, "
+                    f"resolved={(r.get('resolved_at') or '')[:10]}, "
+                    f"score={r.get('final_risk_score')}, "
+                    f"source={r.get('source')}"
                 )
         citable_block = "\n".join(citable_lines)
 
