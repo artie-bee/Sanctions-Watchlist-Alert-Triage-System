@@ -28,7 +28,7 @@ Pulls real sanctions lists from 8 regulators (OFAC, UN, EU, UK, MHA UAPA, SEBI) 
 3. python seed_data.py
 4. uvicorn alert_intake:app --port 8005
 5. cd sanctions_triage
-   python src/run_demo.py
+   python src/run_batch.py
 
 ## Architecture
 ```
