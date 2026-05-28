@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
 *.egg-info/
 .venv/
 venv/
@@ -10,7 +11,11 @@ venv/
 .env.*
 !.env.example
 
-# Runtime artifacts
+# Data & runtime artifacts
+sanctions.db
+kyc_data/
+worksheets/
 sanctions_triage/runtime/audit_log.jsonl
 sanctions_triage/runtime/cleared_entities.jsonl
 *.db-journal
+*.log
