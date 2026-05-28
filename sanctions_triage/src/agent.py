@@ -16,18 +16,16 @@ Active provider: Anthropic Claude Haiku, reached through the OpenAI-compatible
 endpoint so the existing `openai` Python client keeps working unchanged.
 """
 
-# To swap providers, change these three lines:
-#   - Anthropic Claude :  base_url = "https://api.anthropic.com/v1/"   (active)
-#                         api_key  = ANTHROPIC_API_KEY
-#                         model    = "claude-haiku-4-5-20251001"
-#   - Groq             :  base_url = "https://api.groq.com/openai/v1"
-#                         api_key  = GROQ_API_KEY
-#                         model    = "llama-3.1-8b-instant"
-#   - OpenAI           :  base_url = "https://api.openai.com/v1"
-#   - Ollama (local)   :  base_url = "http://localhost:11434/v1"
-#                         api_key  = "ollama"
-#                         model    = "llama3"
-# No other code changes required.
+# To switch LLM provider, change these 3 lines:
+# Anthropic (current):
+#   client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+#   model  = "claude-haiku-4-5-20251001"
+# Groq:
+#   client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key="gsk_...")
+#   model  = "llama3-8b-8192"
+# Ollama (local):
+#   client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+#   model  = "llama3"
 from __future__ import annotations
 
 import json
