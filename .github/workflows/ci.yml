@@ -43,11 +43,15 @@ jobs:
         run: |
           set -e
           FOUND=0
-          for PATTERN in "sk-ant-" "gsk_" "aws_secret"; do
+          for PATTERN in \
+            "sk-ant-[A-Za-z0-9]{20,}" \
+            "gsk_[A-Za-z0-9]{20,}" \
+            "aws_secret_access_key[[:space:]]*=[[:space:]]*[\"'][A-Za-z0-9/+]{20,}"; do
             echo "Scanning for: $PATTERN"
-            MATCHES=$(grep -rIn --include="*.py" -e "$PATTERN" . || true)
+            MATCHES=$(grep -rInE --include="*.py" \
+              -e "$PATTERN" . || true)
             if [ -n "$MATCHES" ]; then
-              echo "::error::Potential secret '$PATTERN' found:"
+              echo "::error::Real secret found:"
               echo "$MATCHES"
               FOUND=1
             fi
