@@ -19,6 +19,7 @@
 import asyncio
 import json
 import logging
+import os
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -47,7 +48,11 @@ logging.basicConfig(
 )
 log = logging.getLogger("alert_intake")
 
-DYNAMO_ENDPOINT = "http://localhost:8001"
+# Honour DYNAMODB_ENDPOINT/REGION from the environment (set by
+# docker-compose to reach the `dynamodb` service); fall back to the
+# local DynamoDB Local defaults for non-container runs.
+DYNAMO_ENDPOINT = os.environ.get("DYNAMODB_ENDPOINT", "http://localhost:8001")
+DYNAMO_REGION = os.environ.get("DYNAMODB_REGION", "us-east-1")
 TABLE_NAME = "sanctions_alerts"
 KYC_TABLE_NAME = "customer_kyc"
 TXN_TABLE_NAME = "customer_transactions"
@@ -58,7 +63,7 @@ UBO_TABLE_NAME = "ubo_ownership_chains"
 dynamodb = boto3.resource(
     "dynamodb",
     endpoint_url=DYNAMO_ENDPOINT,
-    region_name="us-east-1",
+    region_name=DYNAMO_REGION,
     aws_access_key_id="dummy",
     aws_secret_access_key="dummy",
 )
