@@ -13,7 +13,6 @@ services:
     build: .
     ports:
       - "8005:8005"
-      - "7000:7000"
     depends_on:
       - dynamodb
     environment:
