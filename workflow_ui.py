@@ -20,6 +20,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -103,28 +104,53 @@ def _confidence(a: dict) -> float:
         return 0.0
 
 
+# ── TTL caches ────────────────────────────────────────────────────
+# The alert queue barely changes between page loads, so cache the
+# computed selections. fetch_simulator_alerts → 60s, fetch_pending
+# _alerts → 30s. Keyed by `count` for the latter.
+_SIM_CACHE: dict = {"ts": 0.0, "data": None}
+_SIM_TTL = 60.0
+_PENDING_CACHE: dict = {}   # count -> (monotonic_ts, data)
+_PENDING_TTL = 30.0
+
+
 def fetch_pending_alerts(count: int = 10) -> list[dict]:
     """Pull PENDING alerts from DynamoDB and return a 3-low / 4-mid /
     3-high split (low and high by match_score). If fewer than `count`
     PENDING alerts exist, returns whatever's available, sorted ascending.
+
+    Stops scanning as soon as `count` PENDING rows have been collected
+    (no more full-table 1,500-row scan), and caches the result for
+    _PENDING_TTL seconds.
     """
+    entry = _PENDING_CACHE.get(count)
+    if entry is not None and (time.monotonic() - entry[0]) < _PENDING_TTL:
+        return entry[1]
+
     table = dynamodb.Table("sanctions_alerts")
     items: list[dict] = []
-    kwargs: dict = {"FilterExpression": Attr("status").eq("PENDING"), "Limit": 500}
+    # Small page: a filtered Scan's cost scales with rows examined, so we
+    # keep pages small and stop as soon as we have `count` matches rather
+    # than scanning the whole table.
+    kwargs: dict = {"FilterExpression": Attr("status").eq("PENDING"), "Limit": 150}
     while True:
         r = table.scan(**kwargs)
         items.extend(r.get("Items", []))
-        if "LastEvaluatedKey" not in r or len(items) >= 1500:
+        # Break early once we have enough to build the split.
+        if len(items) >= count or "LastEvaluatedKey" not in r:
             break
         kwargs["ExclusiveStartKey"] = r["LastEvaluatedKey"]
 
     if not items:
+        _PENDING_CACHE[count] = (time.monotonic(), [])
         return []
 
     items.sort(key=_confidence)
     n = len(items)
     if n <= count:
-        return [decimal_safe(a) for a in items]
+        result = [decimal_safe(a) for a in items]
+        _PENDING_CACHE[count] = (time.monotonic(), result)
+        return result
 
     lows  = items[:3]
     highs = items[-3:]
@@ -137,7 +163,9 @@ def fetch_pending_alerts(count: int = 10) -> list[dict]:
         mids = items[mid_lo:mid_hi]
 
     selection = lows + mids + highs
-    return [decimal_safe(a) for a in selection][:count]
+    result = [decimal_safe(a) for a in selection][:count]
+    _PENDING_CACHE[count] = (time.monotonic(), result)
+    return result
 
 
 def _scenario_label(score: float) -> str:
@@ -157,35 +185,55 @@ def fetch_simulator_alerts() -> list[dict]:
     intake-card JS works.
 
     Uses the SAME table scan that fetch_pending_alerts() uses, so
-    the alerts returned here are real and live."""
+    the alerts returned here are real and live.
+
+    Stops scanning as soon as 2 low (<0.4), 2 mid (0.4-0.7) and 2 high
+    (>0.7) PENDING alerts have been found — no more full-table scan —
+    and caches the 6-alert result for _SIM_TTL seconds."""
+    if _SIM_CACHE["data"] is not None and (time.monotonic() - _SIM_CACHE["ts"]) < _SIM_TTL:
+        return _SIM_CACHE["data"]
+
     table = dynamodb.Table("sanctions_alerts")
-    items: list[dict] = []
-    kwargs: dict = {"FilterExpression": Attr("status").eq("PENDING"), "Limit": 500}
+    lows: list[dict] = []
+    mids: list[dict] = []
+    highs: list[dict] = []
+    extras: list[dict] = []   # bounded overflow to top up to 6 if a band is short
+
+    def _full() -> bool:
+        return len(lows) >= 2 and len(mids) >= 2 and len(highs) >= 2
+
+    # Small page so a filtered Scan examines few rows per round trip
+    # (cost is proportional to rows examined on DynamoDB Local). We stop
+    # as soon as we have 6 usable candidates — we do NOT require all three
+    # score bands to be present, because a given dataset may have none of
+    # a band (e.g. no sub-0.4 PENDING alerts), which would otherwise force
+    # a full-table scan.
+    kwargs: dict = {"FilterExpression": Attr("status").eq("PENDING"), "Limit": 150}
     while True:
         r = table.scan(**kwargs)
-        items.extend(r.get("Items", []))
-        if "LastEvaluatedKey" not in r or len(items) >= 1500:
+        for a in r.get("Items", []):
+            score = _confidence(a)
+            if score < 0.4:
+                bucket = lows
+            elif score <= 0.7:
+                bucket = mids
+            else:
+                bucket = highs
+            if len(bucket) < 2:
+                bucket.append(a)
+            elif len(extras) < 6:
+                extras.append(a)
+        collected = len(lows) + len(mids) + len(highs) + len(extras)
+        if _full() or collected >= 6 or "LastEvaluatedKey" not in r:
             break
         kwargs["ExclusiveStartKey"] = r["LastEvaluatedKey"]
 
-    if not items:
-        return []
-
-    items.sort(key=_confidence)
-
-    lows  = [a for a in items if _confidence(a) < 0.50]
-    mids  = [a for a in items if 0.50 <= _confidence(a) < 0.75]
-    highs = [a for a in items if _confidence(a) >= 0.75]
-
-    def _pick_two(bucket: list[dict]) -> list[dict]:
-        if len(bucket) <= 2:
-            return list(bucket)
-        return [bucket[0], bucket[-1]]
-
-    selection = _pick_two(lows) + _pick_two(mids) + _pick_two(highs)
+    selection = lows + mids + highs
+    # If a band was short (few/no alerts there), top up from the
+    # overflow we already collected — never a second full scan.
     if len(selection) < 6:
         seen = {a.get("alert_id") for a in selection}
-        for a in items:
+        for a in extras:
             if a.get("alert_id") in seen:
                 continue
             selection.append(a)
@@ -197,6 +245,9 @@ def fetch_simulator_alerts() -> list[dict]:
         safe = decimal_safe(a)
         safe["scenario_label"] = _scenario_label(_confidence(a))
         out.append(safe)
+
+    _SIM_CACHE["ts"] = time.monotonic()
+    _SIM_CACHE["data"] = out
     return out
 
 
@@ -241,7 +292,7 @@ async def simulator(request: Request):
 
 
 @app.get("/api/alerts")
-async def api_alerts():
+def api_alerts():
     try:
         alerts = fetch_pending_alerts(10)
         return JSONResponse(alerts)
@@ -253,7 +304,7 @@ async def api_alerts():
 
 
 @app.get("/api/simulator-alerts")
-async def api_simulator_alerts():
+def api_simulator_alerts():
     """Six PENDING alerts hand-picked across the score distribution,
     annotated with a `scenario_label` field. Feeds the left rail on
     /simulator. Same item shape as /api/alerts so the card-render
@@ -326,7 +377,8 @@ async def api_run_batch():
         loop = asyncio.get_running_loop()
 
         try:
-            alerts = fetch_pending_alerts(10)
+            # boto3 scan is blocking — run it off the event loop.
+            alerts = await loop.run_in_executor(None, fetch_pending_alerts, 10)
         except Exception as e:
             yield _sse({"type": "batch_error", "error": str(e)})
             return
@@ -412,7 +464,8 @@ async def api_simulator_run(alert_id: str):
             return
 
         try:
-            alert = fetch_alert_by_id(alert_id)
+            # boto3 get_item is blocking — run it off the event loop.
+            alert = await loop.run_in_executor(None, fetch_alert_by_id, alert_id)
         except Exception as e:
             yield _sse({"type": "batch_error", "error": str(e)})
             return
