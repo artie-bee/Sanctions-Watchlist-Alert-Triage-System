@@ -19,7 +19,7 @@ services:
       DYNAMODB_ENDPOINT: http://dynamodb:8000
       DYNAMODB_REGION: us-east-1
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
       SANCTIONS_DB_PATH: /app/sanctions.db
     volumes:
       - .:/app
@@ -35,6 +35,8 @@ services:
       DYNAMODB_ENDPOINT: http://dynamodb:8000
       DYNAMODB_REGION: us-east-1
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
       SANCTIONS_DB_PATH: /app/sanctions.db
+    volumes:
+      - .:/app
     command: uvicorn workflow_ui:app --host 0.0.0.0 --port 7000 --reload

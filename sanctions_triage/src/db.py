@@ -4,13 +4,17 @@ Connection helpers for DynamoDB Local + sanctions.db SQLite.
 Credentials match alert_intake.py (aws_access_key_id='dummy') so we
 land in the same DynamoDB Local namespace where the seed data lives.
 """
+import os
 import sqlite3
 from pathlib import Path
 
 import boto3
 
-DYNAMO_ENDPOINT = "http://localhost:8001"
-DYNAMO_REGION   = "us-east-1"
+# Honour DYNAMODB_ENDPOINT/REGION from the environment (set by
+# docker-compose to reach the `dynamodb` service); fall back to the
+# local DynamoDB Local defaults for non-container runs.
+DYNAMO_ENDPOINT = os.environ.get("DYNAMODB_ENDPOINT", "http://localhost:8001")
+DYNAMO_REGION   = os.environ.get("DYNAMODB_REGION", "us-east-1")
 
 SANCTIONS_DB = Path(__file__).resolve().parent.parent.parent / "sanctions.db"
 
