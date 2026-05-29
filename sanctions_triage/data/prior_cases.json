@@ -95,7 +95,7 @@
     "alert_id": "ALR-OLD-PRIYA-1",
     "resolution": "FALSE_POSITIVE",
     "resolved_by": "ANALYST-04",
-    "resolved_at": "2026-04-18T08:56:27.409500+00:00",
+    "resolved_at": "2026-04-29T08:48:33.867954+00:00",
     "resolution_note": "Common Indian name. Customer is a marketing professional with stable salary credits."
   },
   {
@@ -104,7 +104,7 @@
     "alert_id": "ALR-OLD-PRIYA-2",
     "resolution": "FALSE_POSITIVE",
     "resolved_by": "ANALYST-03",
-    "resolved_at": "2026-03-19T08:56:27.409500+00:00",
+    "resolved_at": "2026-03-30T08:48:33.867954+00:00",
     "resolution_note": "Cross-verified with PAN; no match to sanctioned entity. Different DOB."
   },
   {
@@ -113,7 +113,7 @@
     "alert_id": "ALR-OLD-PRIYA-3",
     "resolution": "FALSE_POSITIVE",
     "resolved_by": "ANALYST-04",
-    "resolved_at": "2026-02-17T08:56:27.409500+00:00",
+    "resolved_at": "2026-02-28T08:48:33.867954+00:00",
     "resolution_note": "Re-screen after periodic review — pattern unchanged; cleared."
   },
   {
@@ -122,7 +122,7 @@
     "alert_id": "ALR-OLD-PRIYA-4",
     "resolution": "FALSE_POSITIVE",
     "resolved_by": "ANALYST-05",
-    "resolved_at": "2026-01-18T08:56:27.409500+00:00",
+    "resolved_at": "2026-01-29T08:48:33.868958+00:00",
     "resolution_note": "Tenure >3 years, no high-risk transactions. Auto-cleared by L1."
   },
   {
@@ -131,7 +131,7 @@
     "alert_id": "ALR-OLD-PRIYA-5",
     "resolution": "FALSE_POSITIVE",
     "resolved_by": "ANALYST-02",
-    "resolved_at": "2025-12-19T08:56:27.409500+00:00",
+    "resolved_at": "2025-12-30T08:48:33.868958+00:00",
     "resolution_note": "Latest quarterly screen — still clear, no adverse media."
   }
 ]
