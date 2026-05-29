@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  dynamodb:
+    image: amazon/dynamodb-local
+    ports:
+      - "8001:8000"
+    command: -jar DynamoDBLocal.jar -sharedDb
+    volumes:
+      - ./data/dynamodb:/home/dynamodblocal/data
+
+  app:
+    build: .
+    ports:
+      - "8005:8005"
+      - "7000:7000"
+    depends_on:
+      - dynamodb
+    environment:
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      DYNAMODB_REGION: us-east-1
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL}
+      SANCTIONS_DB_PATH: /app/sanctions.db
+    volumes:
+      - .:/app
+    command: uvicorn alert_intake:app --host 0.0.0.0 --port 8005 --reload
+
+  ui:
+    build: .
+    ports:
+      - "7000:7000"
+    depends_on:
+      - app
+    environment:
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      DYNAMODB_REGION: us-east-1
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL}
+      SANCTIONS_DB_PATH: /app/sanctions.db
+    command: uvicorn workflow_ui:app --host 0.0.0.0 --port 7000 --reload
