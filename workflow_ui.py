@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -74,8 +75,8 @@ templates = Jinja2Templates(directory=str(HERE / "templates"))
 # ── DynamoDB Local ────────────────────────────────────────────────
 dynamodb = boto3.resource(
     "dynamodb",
-    endpoint_url="http://localhost:8001",
-    region_name="us-east-1",
+    endpoint_url=os.environ.get("DYNAMODB_ENDPOINT", "http://localhost:8001"),
+    region_name=os.environ.get("DYNAMODB_REGION", "us-east-1"),
     aws_access_key_id="dummy",
     aws_secret_access_key="dummy",
 )
@@ -220,14 +221,14 @@ def _sse(payload: dict) -> str:
 # ── Routes ────────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("workflow.html", {"request": request})
+    return templates.TemplateResponse(request, "workflow.html")
 
 
 @app.get("/observability", response_class=HTMLResponse)
 async def observability(request: Request):
     """Enterprise observability dashboard — sits on top of the same
     SSE stream and audit-log artefacts produced by the orchestrator."""
-    return templates.TemplateResponse("observability.html", {"request": request})
+    return templates.TemplateResponse(request, "observability.html")
 
 
 @app.get("/simulator", response_class=HTMLResponse)
@@ -236,7 +237,7 @@ async def simulator(request: Request):
     2 high match score) and runs the real HybridOrchestrator against
     them one at a time over SSE, with the agent-flow canvas animating
     in real time as supervisor → P3a → P3b → P3c emit progress."""
-    return templates.TemplateResponse("simulator.html", {"request": request})
+    return templates.TemplateResponse(request, "simulator.html")
 
 
 @app.get("/api/alerts")
