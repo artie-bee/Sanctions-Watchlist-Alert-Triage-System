@@ -19,3 +19,7 @@ sanctions_triage/runtime/audit_log.jsonl
 sanctions_triage/runtime/cleared_entities.jsonl
 *.db-journal
 *.log
+
+# Simulator run artifacts
+sim_alerts.json
+sim_run.txt
