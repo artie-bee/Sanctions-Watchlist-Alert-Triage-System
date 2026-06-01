@@ -471,11 +471,26 @@ async def api_simulator_run(alert_id: str):
             return
 
         if not alert:
-            yield _sse({
-                "type": "batch_error",
-                "error": f"alert {alert_id} not found",
-            })
-            return
+            # Cache miss: the simulator's left rail is fed by the 60s
+            # _SIM_CACHE, so right after a re-seed (table wiped + rebuilt
+            # with fresh IDs) it can keep serving alert_ids whose rows no
+            # longer exist. Evict the sim cache, refetch the list once,
+            # and retry the lookup against the fresh list before erroring.
+            _SIM_CACHE["data"] = None
+            _SIM_CACHE["ts"] = 0.0
+            try:
+                fresh = await loop.run_in_executor(None, fetch_simulator_alerts)
+            except Exception:
+                fresh = []
+            alert = next(
+                (a for a in fresh if a.get("alert_id") == alert_id), None
+            )
+            if not alert:
+                yield _sse({
+                    "type": "batch_error",
+                    "error": f"alert {alert_id} not found",
+                })
+                return
 
         yield _sse({"type": "batch_start", "count": 1})
 
