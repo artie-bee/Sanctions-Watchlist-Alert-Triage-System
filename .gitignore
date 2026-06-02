@@ -15,6 +15,7 @@ venv/
 sanctions.db
 kyc_data/
 worksheets/
+data/
 sanctions_triage/runtime/audit_log.jsonl
 sanctions_triage/runtime/cleared_entities.jsonl
 *.db-journal
