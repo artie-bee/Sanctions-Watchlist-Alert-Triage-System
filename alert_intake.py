@@ -16,11 +16,8 @@
 # Change dummy credentials to real AWS credentials
 # Everything else stays the same.
 
-import asyncio
-import json
 import logging
 import os
-import subprocess
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -34,7 +31,6 @@ from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 # Make `from agent import HybridOrchestrator` resolve sanctions_triage/src.
@@ -384,120 +380,6 @@ def _scan_count(table_obj, filter_expr=None) -> int:
         response = table_obj.scan(**kwargs)
         total += response.get("Count", 0)
     return total
-
-
-# ── Live triage demo (Server-Sent Events) ──────────────────────────
-TRIAGE_ALERTS_FILE = (
-    Path(__file__).resolve().parent
-    / "sanctions_triage" / "data" / "alerts_10.json"
-)
-TRIAGE_HTML_FILE = Path(__file__).resolve().parent / "static" / "triage.html"
-GENERATE_SCRIPT = Path(__file__).resolve().parent / "generate_alerts_10.py"
-
-
-def _regenerate_alerts() -> None:
-    """Run generate_alerts_10.py as a subprocess so the import side-effects
-    (its own boto3 client) stay isolated. Blocking — caller schedules in a
-    thread."""
-    subprocess.run(
-        [sys.executable, str(GENERATE_SCRIPT)],
-        check=True,
-        cwd=str(Path(__file__).resolve().parent),
-    )
-
-
-@app.get("/triage")
-def triage_page():
-    if not TRIAGE_HTML_FILE.exists():
-        raise HTTPException(status_code=500, detail="static/triage.html missing")
-    return FileResponse(TRIAGE_HTML_FILE, media_type="text/html")
-
-
-@app.get("/triage/alerts")
-async def triage_alerts(regenerate: bool = Query(False)):
-    if regenerate or not TRIAGE_ALERTS_FILE.exists():
-        try:
-            await asyncio.to_thread(_regenerate_alerts)
-        except subprocess.CalledProcessError as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"generate_alerts_10.py failed: {e}",
-            )
-    try:
-        return json.loads(TRIAGE_ALERTS_FILE.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="alerts_10.json not found")
-
-
-@app.get("/triage/run")
-async def triage_run(alert_ids: str = Query(...)):
-    """SSE: runs all alert_ids in parallel threads; multiplexed event stream.
-    EventSource uses GET, so alert_ids comes in as a comma-separated query."""
-    ids = [a.strip() for a in alert_ids.split(",") if a.strip()]
-    if not ids:
-        raise HTTPException(status_code=400, detail="alert_ids required")
-
-    # Imported lazily so a missing GROQ_API_KEY only breaks /triage, not the
-    # whole app on import.
-    from agent import HybridOrchestrator  # type: ignore
-
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue()
-
-    def on_event_factory(alert_id: str):
-        def cb(event: dict) -> None:
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, event)
-            except RuntimeError:
-                pass  # loop closed — client disconnected
-        return cb
-
-    async def run_one(alert_id: str) -> None:
-        orch = HybridOrchestrator()
-        try:
-            await asyncio.to_thread(
-                orch.process_alert, alert_id, on_event_factory(alert_id),
-            )
-        except Exception as e:
-            loop.call_soon_threadsafe(queue.put_nowait, {
-                "type": "error",
-                "alert_id": alert_id,
-                "error": repr(e),
-            })
-
-    async def event_stream():
-        # Kick off all alerts concurrently.
-        tasks = [asyncio.create_task(run_one(aid)) for aid in ids]
-        yield f"data: {json.dumps({'type': 'started', 'alert_ids': ids})}\n\n"
-
-        remaining = set(ids)
-        all_done_task = asyncio.create_task(asyncio.gather(*tasks))
-        try:
-            while remaining:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
-                except asyncio.TimeoutError:
-                    if all_done_task.done():
-                        break
-                    yield ": keepalive\n\n"
-                    continue
-                yield f"data: {json.dumps(event, default=str)}\n\n"
-                if event.get("type") == "done":
-                    remaining.discard(event.get("alert_id"))
-            yield f"data: {json.dumps({'type': 'all_done'})}\n\n"
-        finally:
-            for t in tasks:
-                t.cancel()
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
-    )
 
 
 @app.get("/health")
