@@ -22,7 +22,7 @@ from pathlib import Path
 
 from boto3.dynamodb.conditions import Attr, Key
 
-# Make `from db import ...` work when run as `python src/run_demo.py`
+# Make `from db import ...` work when a script runs this module directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import get_table, get_sanctions_db  # noqa: E402
 

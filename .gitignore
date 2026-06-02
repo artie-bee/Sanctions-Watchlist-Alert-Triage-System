@@ -28,3 +28,5 @@ sim_run.txt
 evals/*.json
 eval_*.json
 tests/evals/*.json
+tests/evals/fill_rate_history.jsonl
+tests/evals/narrative_quality_history.jsonl
