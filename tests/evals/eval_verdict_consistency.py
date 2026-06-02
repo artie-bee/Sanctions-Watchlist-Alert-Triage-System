@@ -13,11 +13,11 @@ guarantees all six evidence tools execute with correct args; Phase 3
 verdict. If a verdict drifts across identical re-runs, that invariant is
 broken.
 
-Usage (run from anywhere; loads ../.env automatically):
-    python sanctions_triage/eval_verdict_consistency.py
-    python sanctions_triage/eval_verdict_consistency.py --alerts 6 --runs 3
-    python sanctions_triage/eval_verdict_consistency.py --ids ALR-AC367F292C,ALR-7C16AF8EB7
-    python sanctions_triage/eval_verdict_consistency.py --json out.json
+Usage (run from anywhere; loads <repo>/.env automatically):
+    python tests/evals/eval_verdict_consistency.py
+    python tests/evals/eval_verdict_consistency.py --alerts 6 --runs 3
+    python tests/evals/eval_verdict_consistency.py --ids ALR-AC367F292C,ALR-7C16AF8EB7
+    python tests/evals/eval_verdict_consistency.py --json out.json
 
 Exit code 0 = every sampled alert produced an identical verdict AND
 identical score on every run. Exit code 1 = at least one alert drifted
@@ -39,8 +39,9 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent          # sanctions_triage/
-REPO_ROOT = ROOT.parent                          # repo root (holds .env)
+# This file lives at <repo>/tests/evals/ ; walk up to the repo root.
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent   # tests/evals -> tests -> repo
+TRIAGE_SRC = REPO_ROOT / "sanctions_triage" / "src"         # bare-import modules (db, agent)
 
 # Windows consoles default to cp1252; force UTF-8 so em-dashes etc. render.
 try:
@@ -73,7 +74,7 @@ def _load_env() -> None:
 
 
 _load_env()
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(TRIAGE_SRC))
 
 from db import get_table              # noqa: E402
 from agent import HybridOrchestrator  # noqa: E402
