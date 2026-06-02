@@ -8,9 +8,8 @@ Three phases:
   3. LLM writes a plain-English compliance narrative.
 
 The class is named HybridOrchestrator. `MockOrchestrator = HybridOrchestrator`
-is exported as a backwards-compatible alias so the existing
-`run_demo.py` (which `from agent import MockOrchestrator`) keeps working
-without modification.
+is exported as a backwards-compatible alias for older callers that did
+`from agent import MockOrchestrator`.
 
 Active provider: Anthropic Claude Haiku, reached through the OpenAI-compatible
 endpoint so the existing `openai` Python client keeps working unchanged.
@@ -251,8 +250,8 @@ class HybridOrchestrator:
     def _emit(self, event_type: str, **data) -> None:
         """Push a typed progress event to progress_cb if registered.
 
-        No-op when progress_cb is None — keeps `run_demo.py` (which
-        constructs HybridOrchestrator() with no callback) overhead-free.
+        No-op when progress_cb is None — constructing HybridOrchestrator()
+        with no callback stays overhead-free.
         Callback exceptions are swallowed so they cannot break a run.
         """
         if self.progress_cb is None:
@@ -925,7 +924,7 @@ class HybridOrchestrator:
         return text, used_citations
 
     # ────────────────────────────────────────────────────────────────
-    # Worksheet assembly (existing Worksheet shape — run_demo.py reads it)
+    # Worksheet assembly (existing Worksheet shape)
     # ────────────────────────────────────────────────────────────────
     def _build_worksheet(
         self, alert_id: str, tr: dict, score_pack: dict,
@@ -1019,5 +1018,5 @@ class HybridOrchestrator:
         )
 
 
-# ── Backwards-compat alias so run_demo.py still works untouched ───────
+# ── Backwards-compat alias for older callers ─────────────────────────
 MockOrchestrator = HybridOrchestrator

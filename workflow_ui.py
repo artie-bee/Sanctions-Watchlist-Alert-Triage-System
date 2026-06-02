@@ -7,7 +7,6 @@ PENDING alerts pulled live from DynamoDB sanctions_alerts.
 
 Reuses sanctions_triage/src/agent.py without modification (other
 than the additive progress_cb parameter on HybridOrchestrator).
-run_demo.py keeps working unchanged.
 
 Run:
     pip install fastapi uvicorn jinja2 boto3
