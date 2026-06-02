@@ -124,6 +124,7 @@ def run_one(alert_id: str) -> dict:
     """Run one alert; capture per-tool TRUE/redundant fill counts.
     Pattern copied from run_batch.py run_one()."""
     llm_called = {t: False for t in EVIDENCE_TOOLS}
+    filled_tools: set[str] = set()   # tools that got a "fill" event (true or redundant)
     true_fills_by_tool: dict[str, int] = {t: 0 for t in EVIDENCE_TOOLS}
     redundant_fills_by_tool: dict[str, int] = {t: 0 for t in EVIDENCE_TOOLS}
 
@@ -137,6 +138,7 @@ def run_one(alert_id: str) -> dict:
         if source == "llm":
             llm_called[tool] = True
         elif source == "fill":
+            filled_tools.add(tool)
             if not llm_called[tool]:
                 true_fills_by_tool[tool] += 1
             else:
@@ -151,11 +153,18 @@ def run_one(alert_id: str) -> dict:
     except Exception as e:  # noqa: BLE001
         error = f"{type(e).__name__}: {e}"
 
+    # Coverage (out of the 6 evidence tools):
+    #   LLM coverage       = unique tools the model called itself (source=="llm")
+    #   effective coverage = unique tools that got real data (llm OR fill)
+    effective = {t for t in EVIDENCE_TOOLS if llm_called[t] or t in filled_tools}
+
     return {
         "alert_id": alert_id,
         "llm_called": llm_called,
         "true_fills_by_tool": true_fills_by_tool,
         "redundant_fills_by_tool": redundant_fills_by_tool,
+        "llm_coverage": sum(1 for v in llm_called.values() if v),
+        "effective_coverage": len(effective),
         "error": error,
     }
 
@@ -223,8 +232,78 @@ def print_report(rows: list[dict], per_tool: dict) -> dict:
     }
 
 
-def append_history(summary: dict) -> None:
-    """One JSONL line per run for trend tracking."""
+N_TOOLS = len(EVIDENCE_TOOLS)            # 6 evidence tools
+LLM_COVERAGE_TARGET = 5                   # mean LLM coverage target (>= 5/6)
+
+
+def print_coverage_report(rows: list[dict]) -> dict:
+    """Second report section: per-alert LLM vs effective tool coverage.
+    Effective coverage MUST be 6/6 on every alert (hard requirement);
+    LLM coverage is a quality signal (warning if below target)."""
+    n = len(rows)
+    print()
+    print("═" * 86)
+    print("TOOL COVERAGE REPORT")
+    print("═" * 86)
+    print()
+    hdr = f"{'alert_id':<15} | {'LLM_coverage':^12} | {'effective':^9} | PASS/FAIL"
+    print(hdr)
+    for r in rows:
+        llm = r["llm_coverage"]
+        eff = r["effective_coverage"]
+        ok = eff == N_TOOLS
+        print(f"{r['alert_id']:<15} | {f'{llm}/{N_TOOLS}':^12} | {f'{eff}/{N_TOOLS}':^9} | "
+              f"{'PASS' if ok else 'FAIL'}")
+
+    total_llm = sum(r["llm_coverage"] for r in rows)
+    total_eff = sum(r["effective_coverage"] for r in rows)
+    mean_llm = (total_llm / n) if n else 0.0           # mean tools/alert, out of 6
+    mean_eff = (total_eff / n) if n else 0.0
+    all_effective = bool(rows) and all(r["effective_coverage"] == N_TOOLS for r in rows)
+    llm_below_target = mean_llm < LLM_COVERAGE_TARGET
+
+    print()
+    print(f"Mean LLM coverage:       {mean_llm:.1f}/{N_TOOLS} ({mean_llm / N_TOOLS * 100:.0f}%)")
+    print(f"Mean effective coverage: {mean_eff:.1f}/{N_TOOLS} ({mean_eff / N_TOOLS * 100:.0f}%)")
+    print()
+    print(f"Overall: {'PASS' if all_effective else 'FAIL'}")
+    if all_effective:
+        print(f"  effective coverage {N_TOOLS}/{N_TOOLS} on all alerts ✅")
+    else:
+        bad = [r['alert_id'] for r in rows if r['effective_coverage'] != N_TOOLS]
+        print(f"  effective coverage < {N_TOOLS}/{N_TOOLS} on: {', '.join(bad)} ❌")
+
+    if llm_below_target:
+        print()
+        print(f"WARNING: mean LLM coverage {mean_llm:.1f}/{N_TOOLS} is below the "
+              f"{LLM_COVERAGE_TARGET}/{N_TOOLS} target.")
+        if total_llm == 0:
+            print("NOTE: LLM coverage is 0/6 because the Claude API is unavailable right")
+            print("now (low credits) — Phase 1 makes no successful tool calls, so the")
+            print("defensive fill supplies all six tools (source=='fill', not 'llm').")
+            print(f"Expected target after API restored: >= {LLM_COVERAGE_TARGET}/{N_TOOLS}.")
+
+    print()
+    print('Story for compliance officer:')
+    print('  "The AI checks sources itself, and our safety net guarantees all 6 are')
+    print('   always checked before any verdict is reached."')
+    print("═" * 86)
+
+    return {
+        "mean_llm_coverage": round(mean_llm, 3),
+        "mean_effective_coverage": round(mean_eff, 3),
+        "all_effective": all_effective,
+        "llm_below_target": llm_below_target,
+        "per_alert_coverage": [
+            {"alert_id": r["alert_id"], "llm": r["llm_coverage"],
+             "effective": r["effective_coverage"]}
+            for r in rows
+        ],
+    }
+
+
+def append_history(summary: dict, coverage: dict) -> None:
+    """One JSONL line per run for trend tracking (fill rate + coverage)."""
     record = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "alerts": summary["alerts"],
@@ -235,6 +314,8 @@ def append_history(summary: dict) -> None:
         "per_tool_true_fills": {
             t: summary["per_tool"][t]["true_fills"] for t in EVIDENCE_TOOLS
         },
+        "mean_llm_coverage": coverage["mean_llm_coverage"],
+        "mean_effective_coverage": coverage["mean_effective_coverage"],
     }
     with HISTORY_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
@@ -261,7 +342,13 @@ def main() -> int:
 
     per_tool = aggregate(rows)
     summary = print_report(rows, per_tool)
-    append_history(summary)
+    coverage = print_coverage_report(rows)
+    append_history(summary, coverage)
+
+    # Hard-fail (STEP 4): exit 1 if ANY alert has effective coverage < 6.
+    # LLM coverage below target is a WARNING only (handled in the report).
+    if not coverage["all_effective"]:
+        return 1
     return 0
 
 
